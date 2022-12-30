@@ -1,0 +1,34 @@
+{
+  "id": "magroader-td",
+  "title": "MagRoader's Tower Defense Mod",
+  "description": "For running Tower Defense",
+  "authors": [
+    {
+      "name": "MagRoader",
+      "flags": {}
+    }
+  ],
+  "version": "Replaced by workflow",
+  "url": "Replaced by workflow",
+  "manifest": "Replaced by workflow",
+  "download": "Replaced by workflow",
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "compatibility": {
+    "minimum": "10",
+    "verified": "10"
+  },
+  "relationships": {
+    "requires": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "2.0.3",
+          "verified": "2.0.3"
+        }
+      }
+    ]
+  }
+}

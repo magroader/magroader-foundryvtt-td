@@ -1,8 +1,23 @@
 export class TowerDefense {    
   init() {
+    this.isTicking = false;
   }
 
   async tick() {
+    if (this.isTicking)
+      return;
+    this.isTicking = true;
+    
+    try {
+      await this.performTick();
+    } catch (error) {
+      console.error(error);
+    }
+    this.isTicking = false;
+  }
+
+  async performTick() {
+
     let tokenLayer = canvas.tokens;
     let placeables = Array.from(tokenLayer.placeables);
 
@@ -49,6 +64,7 @@ export class TowerDefense {
       await this.sleep(150);
     }
     await Promise.all(hostileMoveProm);
+
   }
 
   sleep(ms) {

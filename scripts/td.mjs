@@ -21,26 +21,24 @@ export class TowerDefense {
     let tokenLayer = canvas.tokens;
     let placeables = Array.from(tokenLayer.placeables);
 
-    let exitA = placeables
-      .filter(t => t.document.name == "Exit");
-    if (exitA.length != 1) {
-      console.error("Expected a single token named 'Exit', found " + exitA.length);
+    let exitToken = this.getTokenWithName("Exit", placeables);
+    if (exitToken == null)
       return;
-    }
-    let exitToken = exitA[0];
-    let exitTokenPos = this.getTokenGridPos(exitToken);
+
+    let entranceToken = this.getTokenWithName("Entrance", placeables);
+    if (entranceToken == null)
+      return;
     
     let enabledTokens = placeables
       .filter(t => !t.document.hidden);
-
-    let friendlyTokens = enabledTokens
-      .filter(t => t.document.disposition == 1);
 
     let hostileTokens = enabledTokens
       .filter(t => t.document.disposition == -1);
 
     if (hostileTokens.length <= 0)
       return;
+
+    let exitTokenPos = this.getTokenGridPos(exitToken);
 
     let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenPos);
     if (hostilePlan.length <= 0)
@@ -53,6 +51,23 @@ export class TowerDefense {
       await this.sleep(150);
     }
     await Promise.all(hostileMoveProm);
+
+
+    let friendlyTokens = enabledTokens
+      .filter(t => t.document.disposition == 1);
+
+    
+  }
+
+  getTokenWithName(name, placeables) {
+    let tokens = placeables
+      .filter(t => t.document.name == name);
+    if (tokens.length != 1) {
+      console.error("Expected a single token named '" + name + "', found " + tokens.length);
+      return null;
+    }
+    return tokens[0];
+
   }
 
   async getHostilesPlan(hostileTokens, exitPos) {
@@ -67,7 +82,7 @@ export class TowerDefense {
       return a.path.cost - b.path.cost;
     });
     hostilePlan = hostilePlan.filter(p => p.path.cost > 0);
-    
+
     return hostilePlan;
   }
 

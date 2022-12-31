@@ -1,4 +1,7 @@
-export class TowerDefense {    
+const GRID_SIZE = 100;
+
+export class TowerDefense {
+
   init() {
     this.isTicking = false;
   }
@@ -44,13 +47,8 @@ export class TowerDefense {
     if (hostilePlan.length <= 0)
       return;
 
-    let hostileMoveProm = [];
-    for(let hp of hostilePlan) {
-//      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
-//      hostileMoveProm.push(p);
-//      await this.sleep(150);
-    }
-    await Promise.all(hostileMoveProm);
+    let activeHostileTokens = hostilePlan.map(p => p.token);
+    let hostileHpMap = this.getTokenHpMap(activeHostileTokens);
 
     let friendlyTokens = enabledTokens
       .filter(t => t.document.disposition == 1);
@@ -62,16 +60,97 @@ export class TowerDefense {
       return sqDistanceA-sqDistanceB;
     });
 
-    let bugbears = this.getTokensWithName(friendlyTokens, "Bugbear");
-    let gobArchers = this.getTokensWithName(friendlyTokens, "Goblin Archer");
+    let friendlyAttackProm = [];
 
-    console.warn(bugbears);
-    console.warn(gobArchers);
+    for (let t of this.getTokensWithName(friendlyTokens, "Bugbear")) {
+      this.appendFriendlyAttack(friendlyAttackProm, this.getBugbearAttack(t, activeHostileTokens, hostileHpMap));
+    }
+    for (let t of this.getTokensWithName(friendlyTokens, "Goblin Archer")) {
+      this.appendFriendlyAttack(friendlyAttackProm, this.getGoblinArcherAttack(t, activeHostileTokens, hostileHpMap));
+    }
+
+    // Need to do this all in a batch per token, because attempting to call applyDamage multiple
+    // times in a row without awaiting only applies 1 of them :-(  Could make a queue, but that's
+    // too much darn work.
+    for (let h of activeHostileTokens) {
+      let curHp = h.document.actor.system.attributes.hp.value;
+      let newHp = hostileHpMap[h.document.id];
+      let damage = curHp - newHp;
+
+      console.warn(h, curHp, newHp, damage);
+      if (damage > 0) {
+        friendlyAttackProm.push(h.document.actor.applyDamage(damage));
+      }
+    }
+
+    await Promise.all(friendlyAttackProm);
+
+
+
+    let hostileMoveProm = [];
+    for(let hp of hostilePlan) {
+//      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
+//        if (p) {
+//          hostileMoveProm.push(p);
+//          await this.sleep(150);
+//        }
+    }
+    await Promise.all(hostileMoveProm);
+  }
+
+  async appendFriendlyAttack(promList, prom) {
+    if (prom) {
+      promList.push(prom);
+      await this.sleep(150);
+    }
+  }
+
+  getBugbearAttack(token, hostileTokens, hostileHpMap) {
+    return this.performRangedAttack(token, 1, 5, hostileTokens, hostileHpMap);
+  }
+
+  getGoblinArcherAttack(token, hostileTokens, hostileHpMap) {
+    return this.performRangedAttack(token, 3, 3, hostileTokens, hostileHpMap);
+  }
+
+  performRangedAttack(token, spaces, damage, hostileTokens, hostileHpMap) {
+    let nearest = this.getFirstTokenWithinSpacesWithHp(token, spaces, hostileTokens, hostileHpMap);
+    if (nearest == null)
+      return null;
+
+    hostileHpMap[nearest.document.id] = hostileHpMap[nearest.document.id] - damage;
+    console.warn(hostileHpMap);
+
+    return this.performAttackAnim(token, nearest, damage);
+  }
+
+  async performAttackAnim(source, target, damage) {
+    await this.sleep(200);
   }
 
   getTokensWithName(tokens, name) {
     return tokens.filter(t => t.document.name == name);
-  } 
+  }
+
+  getTokenHpMap(tokens) {
+    let map = {};
+    for (let t of tokens) {
+      map[t.document.id] = t.document.actor.system.attributes.hp.value;
+    }
+    return map;
+  }
+
+  getFirstTokenWithinSpacesWithHp(sourceToken, spaces, orderedTargets, targetHp) {
+    for (let t of orderedTargets) {
+      if (targetHp[t.document.id] <= 0)
+        continue;
+
+      if (this.isWithinSpaces(sourceToken.document, t.document, spaces)) {
+        return t;
+      }
+    }
+    return null;
+  }
 
   distanceSq(a, b) {
     let xD = b.x - a.x;
@@ -87,7 +166,12 @@ export class TowerDefense {
       return null;
     }
     return tokens[0];
+  }
 
+  isWithinSpaces(source, target, gridSquares) {
+    let sqDist = this.distanceSq(source, target);
+    let desiredDist = (gridSquares * GRID_SIZE)*(gridSquares * GRID_SIZE) + GRID_SIZE; // adding extra for rounding
+    return sqDist <= desiredDist;
   }
 
   async getHostilesPlan(hostileTokens, exitPos) {

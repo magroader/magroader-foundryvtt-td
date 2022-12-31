@@ -7,7 +7,7 @@ export class TowerDefense {
     if (this.isTicking)
       return;
     this.isTicking = true;
-    
+
     try {
       await this.performTick();
     } catch (error) {
@@ -42,18 +42,7 @@ export class TowerDefense {
     if (hostileTokens.length <= 0)
       return;
 
-    let hostilePlan = [];
-    for (let t of hostileTokens) {
-      let plan = await this.getTokenPlannedPath(t, exitTokenPos);
-      console.warn(plan);
-      if (plan)
-        hostilePlan.push(plan);
-    }
-      
-    hostilePlan.sort((a, b) => {
-      return a.path.cost - b.path.cost;
-    });
-    hostilePlan = hostilePlan.filter(p => p.path.cost > 0);
+    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenPos);
     if (hostilePlan.length <= 0)
       return;
 
@@ -64,7 +53,22 @@ export class TowerDefense {
       await this.sleep(150);
     }
     await Promise.all(hostileMoveProm);
+  }
 
+  async getHostilesPlan(hostileTokens, exitPos) {
+    let hostilePlan = [];
+    for (let t of hostileTokens) {
+      let plan = await this.getTokenPlannedPath(t, exitPos);
+      if (plan)
+        hostilePlan.push(plan);
+    }
+      
+    hostilePlan.sort((a, b) => {
+      return a.path.cost - b.path.cost;
+    });
+    hostilePlan = hostilePlan.filter(p => p.path.cost > 0);
+    
+    return hostilePlan;
   }
 
   sleep(ms) {

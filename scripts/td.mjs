@@ -38,25 +38,45 @@ export class TowerDefense {
     if (hostileTokens.length <= 0)
       return;
 
-    let exitTokenPos = this.getTokenGridPos(exitToken);
+    let exitTokenGridPos = this.getTokenGridPos(exitToken);
 
-    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenPos);
+    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
     if (hostilePlan.length <= 0)
       return;
 
     let hostileMoveProm = [];
     for(let hp of hostilePlan) {
-      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
-      hostileMoveProm.push(p);
-      await this.sleep(150);
+//      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
+//      hostileMoveProm.push(p);
+//      await this.sleep(150);
     }
     await Promise.all(hostileMoveProm);
-
 
     let friendlyTokens = enabledTokens
       .filter(t => t.document.disposition == 1);
 
-    
+    let entrancePos = {x:entranceToken.document.x, y:entranceToken.document.y};
+    friendlyTokens.sort((a, b) => {
+      let sqDistanceA = this.distanceSq(a.document, entrancePos);
+      let sqDistanceB = this.distanceSq(b.document, entrancePos);
+      return sqDistanceA-sqDistanceB;
+    });
+
+    let bugbears = this.getTokensWithName(friendlyTokens, "Bugbear");
+    let gobArchers = this.getTokensWithName(friendlyTokens, "Goblin Archer");
+
+    console.warn(bugbears);
+    console.warn(gobArchers);
+  }
+
+  getTokensWithName(tokens, name) {
+    return tokens.filter(t => t.document.name == name);
+  } 
+
+  distanceSq(a, b) {
+    let xD = b.x - a.x;
+    let yD = b.y - a.y;
+    return xD*xD + yD*yD;
   }
 
   getTokenWithName(name, placeables) {

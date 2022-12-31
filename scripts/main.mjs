@@ -1,7 +1,13 @@
-//import { Something } from './something.mjs';
+import { TowerDefense } from './td.mjs';
 
-//let something = new Something();
+let td = new TowerDefense();
 
 Hooks.once('init', function () {
-  //something.init();
+  td.init();
+});
+
+Hooks.once('ready', function () {
+  window.magtd = {
+    tick : async function() { await td.tick() }
+  }
 });

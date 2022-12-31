@@ -20,7 +20,47 @@ export class TowerDefense {
   }
 
   async performTick() {
+    await this.performHostileMove();
+    await this.performFriendlyAttack();
+  }
 
+  async performHostileMove() {
+
+    let tokenLayer = canvas.tokens;
+    let placeables = Array.from(tokenLayer.placeables);
+
+    let exitToken = this.getTokenWithName("Exit", placeables);
+    if (exitToken == null)
+      return;
+    
+    let enabledTokens = placeables
+      .filter(t => !t.document.hidden);
+
+    let hostileTokens = enabledTokens
+      .filter(t => t.document.disposition == -1)
+      .filter(t => t.actor.system.attributes.hp.value > 0);
+
+    if (hostileTokens.length <= 0)
+      return;
+
+    let exitTokenGridPos = this.getTokenGridPos(exitToken);
+
+    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
+    if (hostilePlan.length <= 0)
+      return;
+
+    let hostileMoveProm = [];
+    for(let hp of hostilePlan) {
+      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
+        if (p) {
+          hostileMoveProm.push(p);
+          await this.sleep(150);
+        }
+    }
+    await Promise.all(hostileMoveProm);
+  }
+
+  async performFriendlyAttack() {
     let tokenLayer = canvas.tokens;
     let placeables = Array.from(tokenLayer.placeables);
 
@@ -36,7 +76,8 @@ export class TowerDefense {
       .filter(t => !t.document.hidden);
 
     let hostileTokens = enabledTokens
-      .filter(t => t.document.disposition == -1);
+      .filter(t => t.document.disposition == -1)
+      .filter(t => t.actor.system.attributes.hp.value > 0);
 
     if (hostileTokens.length <= 0)
       return;
@@ -63,10 +104,10 @@ export class TowerDefense {
     let friendlyAttackProm = [];
 
     for (let t of this.getTokensWithName(friendlyTokens, "Bugbear")) {
-      this.appendFriendlyAttack(friendlyAttackProm, this.getBugbearAttack(t, activeHostileTokens, hostileHpMap));
+      await this.appendFriendlyAttack(friendlyAttackProm, this.getBugbearAttack(t, activeHostileTokens, hostileHpMap));
     }
     for (let t of this.getTokensWithName(friendlyTokens, "Goblin Archer")) {
-      this.appendFriendlyAttack(friendlyAttackProm, this.getGoblinArcherAttack(t, activeHostileTokens, hostileHpMap));
+      await this.appendFriendlyAttack(friendlyAttackProm, this.getGoblinArcherAttack(t, activeHostileTokens, hostileHpMap));
     }
 
     // Need to do this all in a batch per token, because attempting to call applyDamage multiple
@@ -76,56 +117,47 @@ export class TowerDefense {
       let curHp = h.document.actor.system.attributes.hp.value;
       let newHp = hostileHpMap[h.document.id];
       let damage = curHp - newHp;
-
-      console.warn(h, curHp, newHp, damage);
       if (damage > 0) {
         friendlyAttackProm.push(h.document.actor.applyDamage(damage));
       }
     }
 
     await Promise.all(friendlyAttackProm);
-
-
-
-    let hostileMoveProm = [];
-    for(let hp of hostilePlan) {
-//      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
-//        if (p) {
-//          hostileMoveProm.push(p);
-//          await this.sleep(150);
-//        }
-    }
-    await Promise.all(hostileMoveProm);
   }
 
   async appendFriendlyAttack(promList, prom) {
     if (prom) {
       promList.push(prom);
-      await this.sleep(150);
+      await this.sleep(400);
     }
   }
 
   getBugbearAttack(token, hostileTokens, hostileHpMap) {
-    return this.performRangedAttack(token, 1, 5, hostileTokens, hostileHpMap);
+    return this.performRangedAttack(token, 1, 5, "jb2a.greatclub", hostileTokens, hostileHpMap);
   }
 
   getGoblinArcherAttack(token, hostileTokens, hostileHpMap) {
-    return this.performRangedAttack(token, 3, 3, hostileTokens, hostileHpMap);
+    return this.performRangedAttack(token, 3, 3, "jb2a.arrow.physical.white", hostileTokens, hostileHpMap);
   }
 
-  performRangedAttack(token, spaces, damage, hostileTokens, hostileHpMap) {
+  performRangedAttack(token, spaces, damage, anim, hostileTokens, hostileHpMap) {
     let nearest = this.getFirstTokenWithinSpacesWithHp(token, spaces, hostileTokens, hostileHpMap);
     if (nearest == null)
       return null;
 
     hostileHpMap[nearest.document.id] = hostileHpMap[nearest.document.id] - damage;
-    console.warn(hostileHpMap);
 
-    return this.performAttackAnim(token, nearest, damage);
+    return this.performAttackAnim(token, nearest, anim);
   }
 
-  async performAttackAnim(source, target, damage) {
-    await this.sleep(200);
+  async performAttackAnim(source, target, anim) {
+    let s = new Sequence();
+    s.effect()
+      .atLocation(source.document)
+      .stretchTo(target.document)
+      .file(anim)
+      .waitUntilFinished();
+    await s.play();
   }
 
   getTokensWithName(tokens, name) {

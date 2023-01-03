@@ -2,6 +2,12 @@ const GRID_SIZE = 100;
 
 export class WaveTick {
   constructor() {
+
+    this._orderedAttackFunctions = [
+      ["Bugbear", this.getBugbearAttack],
+      ["Goblin Archer", this.getGoblinArcherAttack],
+    ];
+
     this._initSucess = false;
     this._entrance = null;
     this._entranceGridPos = null;
@@ -86,13 +92,30 @@ export class WaveTick {
       return sqDistanceA-sqDistanceB;
     });
 
-    let friendlyAttackProm = [];
-
-    for (let t of this.getTokensWithName(friendlyTokens, "Bugbear")) {
-      await this.appendFriendlyAttack(friendlyAttackProm, this.getBugbearAttack(t, activeHostileTokens, hostileHpMap));
+    let tokenNameToTokens = {};
+    for (let t of friendlyTokens) {
+      let tokensSharingName = tokenNameToTokens[t.document.name];
+      if (tokensSharingName == null) {
+        tokensSharingName = []
+        tokenNameToTokens[t.document.name] = tokensSharingName;
+      }
+      tokensSharingName.push(t);
     }
-    for (let t of this.getTokensWithName(friendlyTokens, "Goblin Archer")) {
-      await this.appendFriendlyAttack(friendlyAttackProm, this.getGoblinArcherAttack(t, activeHostileTokens, hostileHpMap));
+
+    let friendlyAttackProms = [];
+    
+    for (let oa of this._orderedAttackFunctions) {
+      let tokenName = oa[0];
+      let attackFunc = oa[1];
+
+      let allNamedTokens = tokenNameToTokens[tokenName];
+      if (allNamedTokens == null)
+        continue;
+
+      for (let t of allNamedTokens) {
+        let attackProm = attackFunc.call(this, t, activeHostileTokens, hostileHpMap);
+        await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
+      }
     }
 
     // Need to do this all in a batch per token, because attempting to call applyDamage multiple
@@ -103,11 +126,11 @@ export class WaveTick {
       let newHp = hostileHpMap[h.document.id];
       let damage = curHp - newHp;
       if (damage > 0) {
-        friendlyAttackProm.push(h.document.actor.applyDamage(damage));
+        friendlyAttackProms.push(h.document.actor.applyDamage(damage));
       }
     }
 
-    await Promise.all(friendlyAttackProm);
+    await Promise.all(friendlyAttackProms);
   }
 
   async appendFriendlyAttack(promList, prom) {
@@ -143,10 +166,6 @@ export class WaveTick {
       .file(anim)
       .waitUntilFinished();
     await s.play();
-  }
-
-  getTokensWithName(tokens, name) {
-    return tokens.filter(t => t.document.name == name);
   }
 
   getTokenHpMap(tokens) {

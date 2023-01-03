@@ -8,10 +8,12 @@ export class WaveTick {
     this._exit = null;
     this._exitGridPos = null;
     this._enabledTokens = null;
+    this._fullPath = null;
+    this._pathHashToPathIndex = null;
   }
 
   async performTick() {
-    this.init();
+    await this.init();
     if (!this._initSuccess)
       return;
 
@@ -19,7 +21,7 @@ export class WaveTick {
     await this.performFriendlyAttack();
   }
 
-  init() {
+  async init() {
     let tokenLayer = canvas.tokens;
     let placeables = Array.from(tokenLayer.placeables);
 
@@ -35,6 +37,17 @@ export class WaveTick {
     
     this._enabledTokens = placeables
       .filter(t => !t.document.hidden);
+    
+    this._fullPath = await routinglib.calculatePath(this.gridPosToPathPos(this._entranceGridPos), this.gridPosToPathPos(this._exitGridPos), {interpolate:false});
+    if (this._fullPath == null)
+      return;
+    
+    this._pathHashToPathIndex = {};
+    for (let i = 0 ; i < this._fullPath.path.length ; ++i) {
+      let p = this._fullPath.path[i]
+      let key = this.hashPathPos(p);
+      this._pathHashToPathIndex[key] = i;
+    }
 
     this._initSuccess = true;
   }
@@ -95,17 +108,6 @@ export class WaveTick {
     }
 
     await Promise.all(friendlyAttackProm);
-  }
-
-  async calculateHostilesPlan() {
-    let hostileTokens = this._enabledTokens
-      .filter(t => t.document.disposition == -1)
-      .filter(t => t.actor.system.attributes.hp.value > 0);
-
-    if (hostileTokens.length <= 0)
-      return [];
-
-    return await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
   }
 
   async appendFriendlyAttack(promList, prom) {
@@ -225,17 +227,6 @@ export class WaveTick {
     return tdPos;
   }
 
-  async moveTokenOffset(token, dx, dy, options) {
-    const tdPos = this.getTokenGridPos(token);
-    await this.moveTokenFromTo(token, {x:tdPos[1], y:tdPos[0]}, {x:tdPos[1]+dx,y:tdPos[0]+dy}, options);
-  }
-
-  async moveTokenFromTo(token, from, to, options) {
-    let pathRes = await routinglib.calculatePath(from, to, {interpolate:false});
-    let path = pathRes.path;
-    await this.moveTokenAlongPath(token, path, options);
-  }
-
   async moveTokenAlongPath(token, path, options) {
     const td = token.document;
     let grid = canvas.grid.grid;
@@ -258,14 +249,34 @@ export class WaveTick {
     return {x:gridPos[1], y:gridPos[0]};
   }
 
+  hashPathPos(pathPos) {
+    return "x:" + pathPos.x + ",y:" + pathPos.y;
+  }
+
   async getTokenPlannedPath(token, endGridPos) {
     const td = token.document;
     const grid = canvas.grid.grid;
     const tdGridPos = grid.getGridPositionFromPixels(td.x, td.y);
+    const tdPathPos = this.gridPosToPathPos(tdGridPos);
+    const tdPathHash = this.hashPathPos(tdPathPos);
 
-    const path = await routinglib.calculatePath(this.gridPosToPathPos(tdGridPos), this.gridPosToPathPos(endGridPos), {interpolate:false});
+    const pathIndex = this._pathHashToPathIndex[tdPathHash];
+
+    let path = null;
+    if (pathIndex == null) {
+      path = await routinglib.calculatePath(this.gridPosToPathPos(tdGridPos), this.gridPosToPathPos(endGridPos), {interpolate:false});
+    } else {
+      // This token is on the happy path from entrance to exit, do not need to calc again
+      const slicedPath = this._fullPath.path.slice(pathIndex);
+      path = {
+        cost: this._fullPath.cost - pathIndex, // Assumed: cost 1 for each movement
+        path: slicedPath
+      };
+    }
+
     if (path == null)
       return null;
+
     return {
       token: token,
       path: path

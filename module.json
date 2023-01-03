@@ -28,6 +28,22 @@
           "minimum": "2.0.3",
           "verified": "2.0.3"
         }
+      },
+      {
+        "id": "sequencer",
+        "type": "module",
+        "compatibility": {
+          "minimum": "2.4.3",
+          "verified": "2.4.3"
+        }
+      },
+      {
+        "id": "routinglib",
+        "type": "module",
+        "compatibility": {
+          "minimum": "1.0.6",
+          "verified": "1.0.6"
+        }
       }
     ]
   }

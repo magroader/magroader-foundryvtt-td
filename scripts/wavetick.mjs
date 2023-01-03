@@ -1,4 +1,5 @@
 const GRID_SIZE = 100;
+const MAXIMUM_ATTACK_TIME = 2000;
 
 export class WaveTick {
   constructor() {
@@ -14,9 +15,11 @@ export class WaveTick {
     this._exit = null;
     this._exitGridPos = null;
     this._enabledTokens = null;
+    this._friendlyTokens = null;
     this._fullPath = null;
     this._pathHashToPathIndex = null;
     this._tokenIdToDamagePromise = null;
+    this._friendlyWallIds = null;
   }
 
   async performTick() {
@@ -24,8 +27,18 @@ export class WaveTick {
     if (!this._initSuccess)
       return;
 
-    await this.performHostileMove();
-    await this.performFriendlyAttack();
+    await this.createFriendlyWalls();
+    let pathSuccess = await this.calculateHappyPath();
+
+    if (pathSuccess) {
+      await this.performHostileMove();
+      await this.performFriendlyAttack();
+    }
+
+    await this.destroyFriendlyWalls();
+
+    if (!pathSuccess)
+      throw new Error ("Unable to create a path from the entrance to the exit");
   }
 
   async init() {
@@ -44,10 +57,24 @@ export class WaveTick {
     
     this._enabledTokens = placeables
       .filter(t => !t.document.hidden);
-    
+
+    this._friendlyTokens = this._enabledTokens
+      .filter(t => t.document.disposition == 1);
+
+      let entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
+      this._friendlyTokens.sort((a, b) => {
+        let sqDistanceA = this.distanceSq(a.document, entrancePos);
+        let sqDistanceB = this.distanceSq(b.document, entrancePos);
+        return sqDistanceA-sqDistanceB;
+      });
+
+    this._initSuccess = true;
+  }
+
+  async calculateHappyPath() {
     this._fullPath = await routinglib.calculatePath(this.gridPosToPathPos(this._entranceGridPos), this.gridPosToPathPos(this._exitGridPos), {interpolate:false});
     if (this._fullPath == null)
-      return;
+      return false;
     
     this._pathHashToPathIndex = {};
     for (let i = 0 ; i < this._fullPath.path.length ; ++i) {
@@ -55,8 +82,7 @@ export class WaveTick {
       let key = this.hashPathPos(p);
       this._pathHashToPathIndex[key] = i;
     }
-
-    this._initSuccess = true;
+    return true;
   }
 
   async performHostileMove() {
@@ -83,18 +109,8 @@ export class WaveTick {
     let activeHostileTokens = hostilePlan.map(p => p.token);
     let hostileHpMap = this.getTokenHpMap(activeHostileTokens);
 
-    let friendlyTokens = this._enabledTokens
-      .filter(t => t.document.disposition == 1);
-
-    let entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
-    friendlyTokens.sort((a, b) => {
-      let sqDistanceA = this.distanceSq(a.document, entrancePos);
-      let sqDistanceB = this.distanceSq(b.document, entrancePos);
-      return sqDistanceA-sqDistanceB;
-    });
-
     let tokenNameToTokens = {};
-    for (let t of friendlyTokens) {
+    for (let t of this._friendlyTokens) {
       let tokensSharingName = tokenNameToTokens[t.document.name];
       if (tokensSharingName == null) {
         tokensSharingName = []
@@ -118,7 +134,6 @@ export class WaveTick {
         let attackProm = attackFunc.call(this, t, activeHostileTokens, hostileHpMap);
         if (attackProm != null) {
           await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
-          await this.sleep(50);
         }
       }
     }
@@ -126,10 +141,52 @@ export class WaveTick {
     await Promise.all(friendlyAttackProms);
   }
 
+  async createFriendlyWalls() {
+    const grid = canvas.grid.grid;
+    const gridBorderPoly = grid.getBorderPolygon(1, 1, 0);
+
+    let wallsToCreate = [];
+    for (let token of this._friendlyTokens) {
+      const tl = grid.getTopLeft(token.document.x, token.document.y);
+
+      let wallPoints = [];
+      for (let i = 0 ; i < gridBorderPoly.length ; i += 2) {
+        wallPoints.push(gridBorderPoly[i] + tl[0]);
+        wallPoints.push(gridBorderPoly[i+1] + tl[1]);
+      }
+      wallPoints.push(gridBorderPoly[0] + tl[0]);
+      wallPoints.push(gridBorderPoly[1] + tl[1]);
+
+      for (let i = 2 ; i < wallPoints.length ; i += 2) {
+        let wall = new WallDocument({
+          c : [
+            wallPoints[i-2],
+            wallPoints[i-1],
+            wallPoints[i],
+            wallPoints[i+1],
+          ],
+          light: 0,
+          sound: 0,
+          sight: 0
+        });
+
+        wallsToCreate.push(wall);
+      }
+    }
+  
+    let createdWalls = await canvas.scene.createEmbeddedDocuments("Wall", wallsToCreate);
+    this._friendlyWallIds = createdWalls.map(w => w.id);
+  }
+
+  async destroyFriendlyWalls() {
+    await canvas.scene.deleteEmbeddedDocuments("Wall", this._friendlyWallIds);  
+  }
+
   async appendFriendlyAttack(promList, prom) {
     if (prom) {
       promList.push(prom);
-      await this.sleep(400);
+      let attackDelay = MAXIMUM_ATTACK_TIME / this._friendlyTokens.length;
+      await this.sleep(attackDelay);
     }
   }
 
@@ -226,7 +283,7 @@ export class WaveTick {
       
     hostilePlan.sort((a, b) => {
       if (a.path.cost == b.path.cost) {
-        return b.system.attributes.hp.value - a.system.attributes.hp.value;
+        return b.token.actor.system.attributes.hp.value - a.token.actor.system.attributes.hp.value;
       }
       return a.path.cost - b.path.cost;
     });

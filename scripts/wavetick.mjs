@@ -39,6 +39,9 @@ export class WaveTick {
 
     if (!pathSuccess)
       throw new Error ("Unable to create a path from the entrance to the exit");
+
+    let hostilePlan = await this.calculateHostilesPlan();
+    return hostilePlan.length > 0;
   }
 
   async init() {
@@ -266,10 +269,14 @@ export class WaveTick {
     return sqDist <= desiredDist;
   }
 
-  async calculateHostilesPlan() {
-    let hostileTokens = this._enabledTokens
+  getEnabledHostileTokens() {
+    return this._enabledTokens
       .filter(t => t.document.disposition == -1)
       .filter(t => t.actor.system.attributes.hp.value > 0);
+  }
+
+  async calculateHostilesPlan() {
+    let hostileTokens = this.getEnabledHostileTokens();
 
     if (hostileTokens.length <= 0)
       return [];
@@ -345,7 +352,7 @@ export class WaveTick {
       // This token is on the happy path from entrance to exit, do not need to calc again
       const slicedPath = this._fullPath.path.slice(pathIndex);
       path = {
-        cost: this._fullPath.cost - pathIndex, // Assumed: cost 1 for each movement
+        cost: this._fullPath.cost - (pathIndex*5), // Assumed: cost 5 for each movement
         path: slicedPath
       };
     }

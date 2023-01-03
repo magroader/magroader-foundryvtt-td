@@ -8,6 +8,7 @@ Hooks.once('init', function () {
 
 Hooks.once('ready', function () {
   window.magtd = {
-    tick : async function() { await td.tick() }
+    tick : async function() { await td.tick() },
+    toggleWave : async function() { await td.toggleWave() }
   }
 });

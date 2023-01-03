@@ -2,38 +2,45 @@ const GRID_SIZE = 100;
 
 export class WaveTick {
   constructor() {
-
+    this._initSucess = false;
+    this._entrance = null;
+    this._entranceGridPos = null;
+    this._exit = null;
+    this._exitGridPos = null;
+    this._enabledTokens = null;
   }
 
   async performTick() {
+    this.init();
+    if (!this._initSuccess)
+      return;
+
     await this.performHostileMove();
     await this.performFriendlyAttack();
   }
 
-  async performHostileMove() {
-
+  init() {
     let tokenLayer = canvas.tokens;
     let placeables = Array.from(tokenLayer.placeables);
 
-    let exitToken = this.getTokenWithName("Exit", placeables);
-    if (exitToken == null)
+    this._exit = this.getTokenWithName("Exit", placeables);
+    if (this._exit == null)
       return;
+    this._exitGridPos = this.getTokenGridPos(this._exit);
+
+    this._entrance = this.getTokenWithName("Entrance", placeables);
+    if (this._entrance == null)
+      return;
+    this._entranceGridPos = this.getTokenGridPos(this._entrance);
     
-    let enabledTokens = placeables
+    this._enabledTokens = placeables
       .filter(t => !t.document.hidden);
 
-    let hostileTokens = enabledTokens
-      .filter(t => t.document.disposition == -1)
-      .filter(t => t.actor.system.attributes.hp.value > 0);
+    this._initSuccess = true;
+  }
 
-    if (hostileTokens.length <= 0)
-      return;
-
-    let exitTokenGridPos = this.getTokenGridPos(exitToken);
-
-    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
-    if (hostilePlan.length <= 0)
-      return;
+  async performHostileMove() {
+    let hostilePlan = await this.calculateHostilesPlan();
 
     let hostileMoveProm = [];
     for(let hp of hostilePlan) {
@@ -43,44 +50,23 @@ export class WaveTick {
           await this.sleep(150);
         }
     }
+
     await Promise.all(hostileMoveProm);
   }
 
   async performFriendlyAttack() {
-    let tokenLayer = canvas.tokens;
-    let placeables = Array.from(tokenLayer.placeables);
 
-    let exitToken = this.getTokenWithName("Exit", placeables);
-    if (exitToken == null)
-      return;
-
-    let entranceToken = this.getTokenWithName("Entrance", placeables);
-    if (entranceToken == null)
-      return;
-    
-    let enabledTokens = placeables
-      .filter(t => !t.document.hidden);
-
-    let hostileTokens = enabledTokens
-      .filter(t => t.document.disposition == -1)
-      .filter(t => t.actor.system.attributes.hp.value > 0);
-
-    if (hostileTokens.length <= 0)
-      return;
-
-    let exitTokenGridPos = this.getTokenGridPos(exitToken);
-
-    let hostilePlan = await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
+    let hostilePlan = await this.calculateHostilesPlan();
     if (hostilePlan.length <= 0)
       return;
 
     let activeHostileTokens = hostilePlan.map(p => p.token);
     let hostileHpMap = this.getTokenHpMap(activeHostileTokens);
 
-    let friendlyTokens = enabledTokens
+    let friendlyTokens = this._enabledTokens
       .filter(t => t.document.disposition == 1);
 
-    let entrancePos = {x:entranceToken.document.x, y:entranceToken.document.y};
+    let entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
     friendlyTokens.sort((a, b) => {
       let sqDistanceA = this.distanceSq(a.document, entrancePos);
       let sqDistanceB = this.distanceSq(b.document, entrancePos);
@@ -109,6 +95,17 @@ export class WaveTick {
     }
 
     await Promise.all(friendlyAttackProm);
+  }
+
+  async calculateHostilesPlan() {
+    let hostileTokens = this._enabledTokens
+      .filter(t => t.document.disposition == -1)
+      .filter(t => t.actor.system.attributes.hp.value > 0);
+
+    if (hostileTokens.length <= 0)
+      return [];
+
+    return await this.getHostilesPlan(hostileTokens, exitTokenGridPos);
   }
 
   async appendFriendlyAttack(promList, prom) {
@@ -191,15 +188,25 @@ export class WaveTick {
     return sqDist <= desiredDist;
   }
 
-  async getHostilesPlan(hostileTokens, exitPos) {
+  async calculateHostilesPlan() {
+    let hostileTokens = this._enabledTokens
+      .filter(t => t.document.disposition == -1)
+      .filter(t => t.actor.system.attributes.hp.value > 0);
+
+    if (hostileTokens.length <= 0)
+      return [];
+
     let hostilePlan = [];
     for (let t of hostileTokens) {
-      let plan = await this.getTokenPlannedPath(t, exitPos);
+      let plan = await this.getTokenPlannedPath(t, this._exitGridPos);
       if (plan)
         hostilePlan.push(plan);
     }
       
     hostilePlan.sort((a, b) => {
+      if (a.path.cost == b.path.cost) {
+        return b.system.attributes.hp.value - a.system.attributes.hp.value;
+      }
       return a.path.cost - b.path.cost;
     });
     hostilePlan = hostilePlan.filter(p => p.path.cost > 0);

@@ -16,6 +16,7 @@ export class WaveTick {
     this._enabledTokens = null;
     this._fullPath = null;
     this._pathHashToPathIndex = null;
+    this._tokenIdToDamagePromise = null;
   }
 
   async performTick() {
@@ -103,6 +104,7 @@ export class WaveTick {
     }
 
     let friendlyAttackProms = [];
+    this._tokenIdToDamagePromise = {};
     
     for (let oa of this._orderedAttackFunctions) {
       let tokenName = oa[0];
@@ -114,19 +116,10 @@ export class WaveTick {
 
       for (let t of allNamedTokens) {
         let attackProm = attackFunc.call(this, t, activeHostileTokens, hostileHpMap);
-        await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
-      }
-    }
-
-    // Need to do this all in a batch per token, because attempting to call applyDamage multiple
-    // times in a row without awaiting only applies 1 of them :-(  Could make a queue, but that's
-    // too much darn work.
-    for (let h of activeHostileTokens) {
-      let curHp = h.document.actor.system.attributes.hp.value;
-      let newHp = hostileHpMap[h.document.id];
-      let damage = curHp - newHp;
-      if (damage > 0) {
-        friendlyAttackProms.push(h.document.actor.applyDamage(damage));
+        if (attackProm != null) {
+          await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
+          await this.sleep(50);
+        }
       }
     }
 
@@ -155,10 +148,10 @@ export class WaveTick {
 
     hostileHpMap[nearest.document.id] = hostileHpMap[nearest.document.id] - damage;
 
-    return this.performAttackAnim(token, nearest, anim);
+    return this.performAttackAnim(token, nearest, anim, damage);
   }
 
-  async performAttackAnim(source, target, anim) {
+  async performAttackAnim(source, target, anim, damage) {
     let s = new Sequence();
     s.effect()
       .atLocation(source.document)
@@ -166,6 +159,13 @@ export class WaveTick {
       .file(anim)
       .waitUntilFinished();
     await s.play();
+
+    let targetId = target.document.id;
+    let existingDamageProm = this._tokenIdToDamagePromise[targetId];
+    if (existingDamageProm == null)
+      this._tokenIdToDamagePromise[targetId] = target.document.actor.applyDamage(damage);
+    else 
+      this._tokenIdToDamagePromise[targetId] = existingDamageProm.then(() => {target.document.actor.applyDamage(damage)});
   }
 
   getTokenHpMap(tokens) {

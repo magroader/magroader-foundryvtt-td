@@ -17,7 +17,7 @@ export class WaveTick {
     this._enabledTokens = null;
     this._friendlyTokens = null;
     this._fullPath = null;
-    this._pathHashToPathIndex = null;
+    this._gridPosToPathIndex = null;
     this._tokenIdToDamagePromise = null;
     this._friendlyWallIds = null;
   }
@@ -75,15 +75,15 @@ export class WaveTick {
   }
 
   async calculateHappyPath() {
-    this._fullPath = await routinglib.calculatePath(this.gridPosToPathPos(this._entranceGridPos), this.gridPosToPathPos(this._exitGridPos), {interpolate:false});
+    this._fullPath = await routinglib.calculatePath(this.pathPosFromGridPos(this._entranceGridPos), this.pathPosFromGridPos(this._exitGridPos), {interpolate:false});
     if (this._fullPath == null)
       return false;
     
-    this._pathHashToPathIndex = {};
+    this._gridPosToPathIndex = {};
     for (let i = 0 ; i < this._fullPath.path.length ; ++i) {
-      let p = this._fullPath.path[i]
-      let key = this.hashPathPos(p);
-      this._pathHashToPathIndex[key] = i;
+      const pp = this._fullPath.path[i];
+      const gp = this.gridPosFromPathPos(pp);
+      this._gridPosToPathIndex[gp] = i;
     }
     return true;
   }
@@ -328,26 +328,23 @@ export class WaveTick {
     }
   }
 
-  gridPosToPathPos(gridPos) {
-    return {x:gridPos[1], y:gridPos[0]};
+  pathPosFromGridPos(gridPos) {
+    return {x:gridPos[1], y:gridPos[0]}
   }
 
-  hashPathPos(pathPos) {
-    return "x:" + pathPos.x + ",y:" + pathPos.y;
+  gridPosFromPathPos(pathPos) {
+    return [pathPos.y, pathPos.x];
   }
 
   async getTokenPlannedPath(token, endGridPos) {
     const td = token.document;
     const grid = canvas.grid.grid;
     const tdGridPos = grid.getGridPositionFromPixels(td.x, td.y);
-    const tdPathPos = this.gridPosToPathPos(tdGridPos);
-    const tdPathHash = this.hashPathPos(tdPathPos);
-
-    const pathIndex = this._pathHashToPathIndex[tdPathHash];
+    const pathIndex = this._gridPosToPathIndex[tdGridPos];
 
     let path = null;
     if (pathIndex == null) {
-      path = await routinglib.calculatePath(this.gridPosToPathPos(tdGridPos), this.gridPosToPathPos(endGridPos), {interpolate:false});
+      path = await routinglib.calculatePath(this.pathPosFromGridPos(tdGridPos), this.pathPosFromGridPos(endGridPos), {interpolate:false});
     } else {
       // This token is on the happy path from entrance to exit, do not need to calc again
       const slicedPath = this._fullPath.path.slice(pathIndex);

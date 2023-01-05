@@ -225,8 +225,9 @@ export class WaveTick {
     return this.performAttackAnim(source, nearest.token, animName, damage);
   }
 
-  getHostileInfosInRangeSortedByHp(source, range) {
-    const inRange = this.getHostilesWithinRange(source, range);
+  getHostileInfosInRangeSortedByHp(sourceToken, range) {
+    const sourceGridPos = this.getTokenGridPos(sourceToken);
+    const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, false);
     const infos = inRange.map(t => this.getTokenInfo(t));
     
     infos.sort((a, b) => {
@@ -241,9 +242,8 @@ export class WaveTick {
     return infos;
   }
   
-  getHostilesWithinRange(token, spaces) {
-    const gridPos = this.getTokenGridPos(token);
-    const reachableCells = this.getCellsWithinRange(gridPos, spaces);
+  getHostileTokensWithinRange(gridPos, range, includeStartPos) {
+    const reachableCells = this.getCellsWithinRange(gridPos, range, includeStartPos);
 
     let hostiles = [];
     for(const cell of reachableCells) {
@@ -255,7 +255,7 @@ export class WaveTick {
     return hostiles;
   }
 
-  getCellsWithinRange(startGridPos, totalSpaces) {
+  getCellsWithinRange(startGridPos, range, includeStartPos) {
     const grid = canvas.grid.grid;
 
     const queue = [[startGridPos, 0]];
@@ -263,13 +263,16 @@ export class WaveTick {
     const visited = {};
     visited[startGridPos] = true;
     const result = [];
+    if (includeStartPos) {
+      result.push(startGridPos);
+    }
 
     while (queue.length > 0) {
       const cur = queue.pop();
       const gridPos = cur[0];
       const spaces = cur[1];
 
-      if (spaces < totalSpaces) {
+      if (spaces < range) {
         const neighbors = grid.getNeighbors(gridPos[0], gridPos[1]);
         for (const n of neighbors) {
           if (visited[n])

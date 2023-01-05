@@ -28,7 +28,7 @@ export class WaveTick {
       return;
 
     await this.createFriendlyWalls();
-    let pathSuccess = await this.calculateHappyPath();
+    const pathSuccess = await this.calculateHappyPath();
 
     if (pathSuccess) {
       await this.performHostileMove();
@@ -40,13 +40,13 @@ export class WaveTick {
     if (!pathSuccess)
       throw new Error ("Unable to create a path from the entrance to the exit");
 
-    let hostilePlan = await this.calculateHostilesPlan();
+    const hostilePlan = await this.calculateHostilesPlan();
     return hostilePlan.length > 0;
   }
 
   async init() {
-    let tokenLayer = canvas.tokens;
-    let placeables = Array.from(tokenLayer.placeables);
+    const tokenLayer = canvas.tokens;
+    const placeables = Array.from(tokenLayer.placeables);
 
     this._exit = this.getTokenWithName("Exit", placeables);
     if (this._exit == null)
@@ -64,10 +64,10 @@ export class WaveTick {
     this._friendlyTokens = this._enabledTokens
       .filter(t => t.document.disposition == 1);
 
-      let entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
+      const entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
       this._friendlyTokens.sort((a, b) => {
-        let sqDistanceA = this.distanceSq(a.document, entrancePos);
-        let sqDistanceB = this.distanceSq(b.document, entrancePos);
+        const sqDistanceA = this.distanceSq(a.document, entrancePos);
+        const sqDistanceB = this.distanceSq(b.document, entrancePos);
         return sqDistanceA-sqDistanceB;
       });
 

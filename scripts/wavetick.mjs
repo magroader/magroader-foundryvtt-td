@@ -18,8 +18,8 @@ export class WaveTick {
     this._friendlyTokens = null;
     this._fullPath = null;
     this._gridPosToPathIndex = null;
-    this._tokenIdToDamagePromise = null;
     this._friendlyWallIds = null;
+    this._tokenInfoMap = null;
   }
 
   async performTick() {
@@ -57,6 +57,8 @@ export class WaveTick {
     if (this._entrance == null)
       return;
     this._entranceGridPos = this.getTokenGridPos(this._entrance);
+      
+    this._tokenInfoMap = {};
     
     this._enabledTokens = placeables
       .filter(t => !t.document.hidden);
@@ -110,7 +112,7 @@ export class WaveTick {
       return;
 
     let activeHostileTokens = hostilePlan.map(p => p.token);
-    let hostileHpMap = this.getTokenHpMap(activeHostileTokens);
+    this.setupTokenHpInfo(activeHostileTokens);
 
     let tokenNameToTokens = {};
     for (let t of this._friendlyTokens) {
@@ -123,7 +125,6 @@ export class WaveTick {
     }
 
     let friendlyAttackProms = [];
-    this._tokenIdToDamagePromise = {};
     
     for (let oa of this._orderedAttackFunctions) {
       let tokenName = oa[0];
@@ -134,7 +135,7 @@ export class WaveTick {
         continue;
 
       for (let t of allNamedTokens) {
-        let attackProm = attackFunc.call(this, t, activeHostileTokens, hostileHpMap);
+        let attackProm = attackFunc.call(this, t, activeHostileTokens);
         if (attackProm != null) {
           await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
         }
@@ -142,6 +143,15 @@ export class WaveTick {
     }
 
     await Promise.all(friendlyAttackProms);
+  }
+
+  getTokenInfo(token) {
+    let info = this._tokenInfoMap[token.document.id];
+    if (info == null) {
+      info = {};
+      this._tokenInfoMap[token.document.id] = info;
+    }
+    return info;
   }
 
   async createFriendlyWalls() {
@@ -193,20 +203,21 @@ export class WaveTick {
     }
   }
 
-  getBugbearAttack(token, hostileTokens, hostileHpMap) {
-    return this.performRangedAttack(token, 1, 5, "jb2a.greatclub.standard", hostileTokens, hostileHpMap);
+  getBugbearAttack(token, hostileTokens) {
+    return this.performRangedAttack(token, 1, 5, "jb2a.greatclub.standard", hostileTokens);
   }
 
-  getGoblinArcherAttack(token, hostileTokens, hostileHpMap) {
-    return this.performRangedAttack(token, 3, 3, "jb2a.arrow.physical.white", hostileTokens, hostileHpMap);
+  getGoblinArcherAttack(token, hostileTokens) {
+    return this.performRangedAttack(token, 3, 3, "jb2a.arrow.physical.white", hostileTokens);
   }
 
-  performRangedAttack(token, spaces, damage, anim, hostileTokens, hostileHpMap) {
-    let nearest = this.getFirstTokenWithinSpacesWithHp(token, spaces, hostileTokens, hostileHpMap);
+  performRangedAttack(token, spaces, damage, anim, hostileTokens) {
+    let nearest = this.getFirstTokenWithinSpacesWithHp(token, spaces, hostileTokens);
     if (nearest == null)
       return null;
 
-    hostileHpMap[nearest.document.id] = hostileHpMap[nearest.document.id] - damage;
+    const info = this.getTokenInfo(nearest);
+    info.hp = info.hp - damage;
 
     return this.performAttackAnim(token, nearest, anim, damage);
   }
@@ -220,25 +231,27 @@ export class WaveTick {
       .waitUntilFinished();
     await s.play();
 
-    let targetId = target.document.id;
-    let existingDamageProm = this._tokenIdToDamagePromise[targetId];
-    if (existingDamageProm == null)
-      this._tokenIdToDamagePromise[targetId] = target.document.actor.applyDamage(damage);
+    let info = this.getTokenInfo(target);
+    
+    if (info.updatePromise == null)
+      info.updatePromise = target.document.actor.applyDamage(damage);
     else 
-      this._tokenIdToDamagePromise[targetId] = existingDamageProm.then(() => {target.document.actor.applyDamage(damage)});
+      info.updatePromise = info.updatePromise.then(() => {target.document.actor.applyDamage(damage)});
+
+    await info.updatePromise;
   }
 
-  getTokenHpMap(tokens) {
-    let map = {};
+  setupTokenHpInfo(tokens) {
     for (let t of tokens) {
-      map[t.document.id] = t.document.actor.system.attributes.hp.value;
+      let info = this.getTokenInfo(t);
+      info.hp = t.document.actor.system.attributes.hp.value;
     }
-    return map;
   }
 
-  getFirstTokenWithinSpacesWithHp(sourceToken, spaces, orderedTargets, targetHp) {
+  getFirstTokenWithinSpacesWithHp(sourceToken, spaces, orderedTargets) {
     for (let t of orderedTargets) {
-      if (targetHp[t.document.id] <= 0)
+      let info = this.getTokenInfo(t);
+      if (info.hp <= 0)
         continue;
 
       if (this.isWithinSpaces(sourceToken.document, t.document, spaces)) {

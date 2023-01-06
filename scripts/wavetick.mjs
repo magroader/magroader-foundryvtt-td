@@ -277,7 +277,7 @@ export class WaveTick {
   }
 
   getBartokAttack(token) {
-    return this.performRangedAttacks(token, 1, 15, "jb2a.greatclub.standard.white", {numAttacks:2, onPerCell:true, pushback:2});
+    return this.performRangedAttacks(token, 1, 15, "jb2a.greataxe.melee.standard.white", {numAttacks:2, onPerCell:true, pushback:2, attackDelay:1650});
   }
   
   getBennikktAttack(token) {
@@ -337,7 +337,7 @@ export class WaveTick {
 
     const self = this;
     const pushback = options.pushback || 0;
-    
+    const attackDelay = options.attackDelay || 250;    
 
     const attackPromises = [];
 
@@ -353,7 +353,7 @@ export class WaveTick {
         }
 
         if (i+1 < infos.length && i+i < numAttacks) {
-          await this.sleep(250);
+          await this.sleep(attackDelay);
         }
       }
     }

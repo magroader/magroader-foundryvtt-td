@@ -229,7 +229,7 @@ export class WaveTick {
   }
 
   getThugAttack(token) {
-    return this.performRangedAttacks(token, 1, 10, "jb2a.mace.melee.01.white");
+    return this.performRangedAttacks(token, 1, 12, "jb2a.mace.melee.01.white");
   }
 
   getGoblinAttack(token) {
@@ -277,7 +277,7 @@ export class WaveTick {
   }
 
   getBartokAttack(token) {
-    return this.performRangedAttacks(token, 1, 15, "jb2a.greataxe.melee.standard.white", {numAttacks:2, onPerCell:true, pushback:2, attackDelay:1650});
+    return this.performRangedAttacks(token, 1, 15, "jb2a.greataxe.melee.standard.white", {numAttacks:2, onePerCell:true, pushback:2, attackDelay:1650});
   }
   
   getBennikktAttack(token) {
@@ -289,7 +289,14 @@ export class WaveTick {
   }
   
   getKethisAttack(token) {
+    const eldritchRange = 9;
 
+    const sourceGridPos = this.getTokenGridPos(token);
+    const meleeRange = this.getHostileTokensWithinRange(sourceGridPos, 1);
+
+    if (meleeRange.length >= 2)
+      return this.performRangedAttacks(token, 1, 20, "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
+    return this.performRangedAttacks(token, eldritchRange, 12, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
   }
 
   async performBugbearAttackAnim(sourceToken, targetCell, damage, hostileInfos) {
@@ -323,7 +330,7 @@ export class WaveTick {
     return game.modules.get('jb2a_patreon')?.active;
   }
 
-  performRangedAttacks(sourceToken, range, damage, animName, options) {
+  performRangedAttacks(sourceToken, range, damage, animName, options={}) {
     const sourceGridPos = this.getTokenGridPos(sourceToken);
     const infos = this.getHostileInfosInRangeSortedByHp(sourceGridPos, range, options);
     if (infos.length == 0)
@@ -333,7 +340,7 @@ export class WaveTick {
     return this.performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName, options);
   }
 
-  async performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName, options) {
+  async performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName, options={}) {
 
     const self = this;
     const pushback = options.pushback || 0;
@@ -362,7 +369,7 @@ export class WaveTick {
   }
 
 
-  getHostileInfosInRangeSortedByHp(sourceGridPos, range, options) {
+  getHostileInfosInRangeSortedByHp(sourceGridPos, range, options={}) {
     const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, options);
     const infos = inRange.map(t => this.getTokenInfo(t));
     
@@ -377,7 +384,7 @@ export class WaveTick {
     return infos;
   }
   
-  getHostileTokensWithinRange(gridPos, range, options) {
+  getHostileTokensWithinRange(gridPos, range, options={}) {
     const reachableCells = this.getCellsWithinRange(gridPos, range, options);
 
     const onePerCell = options.onePerCell || false;
@@ -400,7 +407,7 @@ export class WaveTick {
     return hostiles;
   }
 
-  getCellsWithinRange(startGridPos, range, options) {
+  getCellsWithinRange(startGridPos, range, options={}) {
     const grid = canvas.grid.grid;
 
     options = options || {};
@@ -579,7 +586,7 @@ export class WaveTick {
     return tdPos;
   }
 
-  async moveTokenAlongPath(token, path, options) {
+  async moveTokenAlongPath(token, path, options={}) {
     const td = token.document;
     const grid = canvas.grid.grid;
 

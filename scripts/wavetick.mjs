@@ -581,14 +581,14 @@ export class WaveTick {
 
   async moveTokenAlongPath(token, path, options) {
     const td = token.document;
-    let grid = canvas.grid.grid;
+    const grid = canvas.grid.grid;
 
-    let maxSteps = options.maxSteps || path.Length-1;
+    const maxSteps = options.maxSteps || path.Length-1;
     if (maxSteps > path.length-1)
       maxSteps = path.length-1;
     for (let i = 1 ; i <= maxSteps ; ++i) {
-      let p = path[i];
-      let newPos = grid.getPixelsFromGridPosition(p.y, p.x);
+      const p = path[i];
+      const newPos = grid.getPixelsFromGridPosition(p.y, p.x);
       await td.update({
         x:newPos[0],
         y:newPos[1]

@@ -225,15 +225,15 @@ export class WaveTick {
   }
 
   getThugAttack(token) {
-    return this.performSingleRangedAttack(token, 1, 8, "jb2a.mace.melee.01.white");
+    return this.performRangedAttacks(token, 1, 10, "jb2a.mace.melee.01.white");
   }
 
   getGoblinAttack(token) {
-    return this.performSingleRangedAttack(token, 3, 2, "jb2a.arrow.physical.white.01");
+    return this.performRangedAttacks(token, 3, 2, "jb2a.arrow.physical.white.01", {numAttacks:2, onePerCell:true});
   }
 
   getGuardAttack(token) {
-    return this.performSingleRangedAttack(token, 5, 6, this.hasJb2aPatreon() ? "jb2a.bolt.physical.white" : "jb2a.bolt.physical", {minRange: 4});
+    return this.performRangedAttacks(token, 5, 8, this.hasJb2aPatreon() ? "jb2a.bolt.physical.white" : "jb2a.bolt.physical", {minRange: 4});
   }
 
   getBugbearAttack(token) {
@@ -303,17 +303,37 @@ export class WaveTick {
     return game.modules.get('jb2a_patreon')?.active;
   }
 
-  performSingleRangedAttack(sourceToken, range, damage, animName, options) {
+  performRangedAttacks(sourceToken, range, damage, animName, options) {
     const sourceGridPos = this.getTokenGridPos(sourceToken);
     const infos = this.getHostileInfosInRangeSortedByHp(sourceGridPos, range, options);
     if (infos.length == 0)
       return null;
-
-    const nearest = infos[0];
-    nearest.hp = nearest.hp - damage;
-
-    return this.performAttackAnim(sourceToken, nearest.token, animName, damage);
+    
+    const numAttacks = options.numAttacks || 1;
+    return this.performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName);
   }
+
+  async performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName) {
+
+    const attackPromises = [];
+
+    for(let i = 0 ; i < numAttacks && i < infos.length ; ++i) {
+      const thisInfo = infos[i];
+      thisInfo.hp = thisInfo.hp - damage;
+      const attackAnim = this.performAttackAnim(sourceToken, thisInfo.token, animName, damage);
+      if (attackAnim) {
+        attackPromises.push(attackAnim);
+
+        if (i+1 < infos.length && i+i < numAttacks) {
+          await this.sleep(300);
+        }
+      }
+    }
+
+    await Promise.all(attackPromises);
+  }
+
+
 
   getHostileInfosInRangeSortedByHp(sourceGridPos, range, options) {
     const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, options);
@@ -333,11 +353,21 @@ export class WaveTick {
   getHostileTokensWithinRange(gridPos, range, options) {
     const reachableCells = this.getCellsWithinRange(gridPos, range, options);
 
+    const onePerCell = options.onePerCell || false;
+
     let hostiles = [];
     for(const cell of reachableCells) {
       const inCell = this._gridPosToHostileTokensMap[cell];
-      if (inCell && inCell.length > 0)
-         hostiles = hostiles.concat(inCell);
+      if (inCell && inCell.length > 0) {
+        if (onePerCell) {
+          inCell.sort((a,b) => {
+            return b.actor.system.attributes.hp.value - a.actor.system.attributes.hp.value;
+          });
+          hostiles.push(inCell[0]);
+        } else {
+          hostiles = hostiles.concat(inCell);
+        }
+      }
     }
 
     return hostiles;

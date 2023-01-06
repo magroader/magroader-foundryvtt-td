@@ -37,17 +37,24 @@ export class WaveTick {
     await this.createFriendlyWalls();
     const pathSuccess = await this.calculateHappyPath();
 
-    if (pathSuccess) {
-      if (DO_HOSTILE_MOVE)
-        await this.performHostileMove();
-      if (DO_FRIENDLY_ATTACKS)
-        await this.performFriendlyAttack();
+    let err = null;
+    try {
+      if (pathSuccess) {
+        if (DO_HOSTILE_MOVE)
+          await this.performHostileMove();
+        if (DO_FRIENDLY_ATTACKS)
+          await this.performFriendlyAttack();
+      }      
+    } catch (error) {
+      err = error;
     }
 
     await this.destroyFriendlyWalls();
 
     if (!pathSuccess)
       throw new Error ("Unable to create a path from the entrance to the exit");
+    if (err != null)
+      throw err;
 
     const hostilePlan = await this.calculateHostilesPlan();
     return hostilePlan.length > 0;

@@ -233,7 +233,7 @@ export class WaveTick {
   }
 
   getGuardAttack(token) {
-    return this.performSingleRangedAttack(token, 5, 6, "jb2a.bolt.physical.white", {minRange: 4});
+    return this.performSingleRangedAttack(token, 5, 6, this.hasJb2aPatreon() ? "jb2a.bolt.physical.white" : "jb2a.bolt.physical", {minRange: 4});
   }
 
   getBugbearAttack(token) {
@@ -285,17 +285,22 @@ export class WaveTick {
       hi.hp = hi.hp - damage;
     }
 
+    const anim = this.hasJb2aPatreon() ? "jb2a.boulder.toss" : "jb2a.explosion";
     const s = new Sequence();
     s.effect()
       .atLocation(sourceToken.document, {offset: {x:0.25}, local:true, gridUnits:true})
       .stretchTo(targetPosObj, {randomOffset:0.2})
-      .file("jb2a.boulder.toss")
+      .file(anim)
       .waitUntilFinished(-1500);
     s.thenDo(async function() {
       const damageProms = hostileInfos.map((hi) => self.applyDamage(hi.token, damage));  
       await Promise.all(damageProms);      
     });
     await s.play();
+  }
+
+  hasJb2aPatreon() {
+    return game.modules.get('jb2a_patreon')?.active;
   }
 
   performSingleRangedAttack(sourceToken, range, damage, animName, options) {

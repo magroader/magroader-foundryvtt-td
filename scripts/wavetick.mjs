@@ -9,10 +9,14 @@ export class WaveTick {
   constructor() {
 
     this._orderedAttackFunctions = [
+      ["Bennikkt", this, this.getBennikktAttack],
+      ["Dagor", this, this.getDagorAttack],
       ["Thug", this, this.getThugAttack],
       ["Guard", this, this.getGuardAttack],
       ["Bugbear", this, this.getBugbearAttack],
+      ["Kethis", this, this.getKethisAttack],
       ["Goblin", this, this.getGoblinAttack],
+      ["Bartok", this, this.getBartokAttack],
     ];
 
     this._initSucess = false;
@@ -272,6 +276,22 @@ export class WaveTick {
     return this.performBugbearAttackAnim(token, target.cell, damage, target.blast);
   }
 
+  getBartokAttack(token) {
+    return this.performRangedAttacks(token, 1, 15, "jb2a.greatclub.standard.white", {numAttacks:2, onPerCell:true, pushback:2});
+  }
+  
+  getBennikktAttack(token) {
+
+  }
+  
+  getDagorAttack(token) {
+
+  }
+  
+  getKethisAttack(token) {
+
+  }
+
   async performBugbearAttackAnim(sourceToken, targetCell, damage, hostileInfos) {
     
     const grid = canvas.grid.grid;
@@ -310,10 +330,14 @@ export class WaveTick {
       return null;
     
     const numAttacks = options.numAttacks || 1;
-    return this.performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName);
+    return this.performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName, options);
   }
 
-  async performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName) {
+  async performRangedAttacksOnInfos(sourceToken, infos, numAttacks, damage, animName, options) {
+
+    const self = this;
+    const pushback = options.pushback || 0;
+    
 
     const attackPromises = [];
 
@@ -324,15 +348,18 @@ export class WaveTick {
       if (attackAnim) {
         attackPromises.push(attackAnim);
 
+        if (pushback > 0) {
+          attackAnim.then(async function() {await self.performPushbackAnim(thisInfo, pushback);});
+        }
+
         if (i+1 < infos.length && i+i < numAttacks) {
-          await this.sleep(300);
+          await this.sleep(250);
         }
       }
     }
 
     await Promise.all(attackPromises);
   }
-
 
 
   getHostileInfosInRangeSortedByHp(sourceGridPos, range, options) {
@@ -409,8 +436,9 @@ export class WaveTick {
           const nPoint = {x:nPixels[0], y:nPixels[1]};
 
           const hitsWall = canvas.walls.checkCollision(new Ray(startGridPoint, nPoint), {type:"sight",mode:"any"});
-          if (hitsWall)
+          if (hitsWall) {
             continue;
+          }
 
           if (spaces+1 >= minRange)
             result.push(n);
@@ -434,6 +462,26 @@ export class WaveTick {
       await self.applyDamage(target, damage);  
     });
     await s.play();
+  }
+
+  async performPushbackAnim(hostileInfo, pushback) {
+
+    const grid = canvas.grid.grid;
+    const enemyGridPos = grid.getGridPositionFromPixels(hostileInfo.token.document.x, hostileInfo.token.document.y);
+    const pathToEntrance = await routinglib.calculatePath(this.pathPosFromGridPos(enemyGridPos), this.pathPosFromGridPos(this._entranceGridPos), {interpolate:false});
+    if (pathToEntrance == null || pathToEntrance.path.length < 3)
+      return;
+
+    const pushToPathPos = pathToEntrance.path[2];
+    const pushToGridPos = this.gridPosFromPathPos(pushToPathPos);
+    const pushToPixels = grid.getPixelsFromGridPosition(pushToGridPos[0], pushToGridPos[1]);
+
+    // NOTE: Assumed that this is the last thing that happens, so we don't go recalculating all the paths and such
+    const s = new Sequence()
+      .animation()
+        .on(hostileInfo.token)
+        .moveTowards({x:pushToPixels[0], y:pushToPixels[1]}, {ease: "easeOutExpo"})
+    await s.play()
   }
 
   applyDamage(target, damage) {

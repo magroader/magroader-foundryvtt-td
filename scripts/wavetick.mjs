@@ -1,11 +1,18 @@
+const DO_HOSTILE_MOVE = true;
+const DO_FRIENDLY_ATTACKS = true;
+const DO_DEAL_DAMAGE = true;
+
+const MAXIMUM_MOVE_ALL = 1000;
 const MAXIMUM_ATTACK_TIME = 2000;
 
 export class WaveTick {
   constructor() {
 
     this._orderedAttackFunctions = [
+      ["Thug", this, this.getThugAttack],
+      ["Guard", this, this.getGuardAttack],
       ["Bugbear", this, this.getBugbearAttack],
-      ["Goblin Archer", this, this.getGoblinArcherAttack],
+      ["Goblin", this, this.getGoblinAttack],
     ];
 
     this._initSucess = false;
@@ -31,8 +38,10 @@ export class WaveTick {
     const pathSuccess = await this.calculateHappyPath();
 
     if (pathSuccess) {
-      await this.performHostileMove();
-      await this.performFriendlyAttack();
+      if (DO_HOSTILE_MOVE)
+        await this.performHostileMove();
+      if (DO_FRIENDLY_ATTACKS)
+        await this.performFriendlyAttack();
     }
 
     await this.destroyFriendlyWalls();
@@ -93,12 +102,14 @@ export class WaveTick {
   async performHostileMove() {
     let hostilePlan = await this.calculateHostilesPlan();
 
+    const moveDelay = Math.min(250, MAXIMUM_MOVE_ALL / hostilePlan.length);
+
     let hostileMoveProm = [];
     for(let hp of hostilePlan) {
-      let p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4});
+      const p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:4, sleep:moveDelay});
         if (p) {
           hostileMoveProm.push(p);
-          await this.sleep(150);
+          await this.sleep(moveDelay);
         }
     }
 
@@ -201,40 +212,105 @@ export class WaveTick {
   async appendFriendlyAttack(promList, prom) {
     if (prom) {
       promList.push(prom);
-      let attackDelay = MAXIMUM_ATTACK_TIME / this._friendlyTokens.length;
+      const attackDelay = Math.min(250, MAXIMUM_ATTACK_TIME / this._friendlyTokens.length);
       await this.sleep(attackDelay);
     }
   }
 
+  getThugAttack(token) {
+    return this.performSingleRangedAttack(token, 1, 8, "jb2a.mace.melee.01.white");
+  }
+
+  getGoblinAttack(token) {
+    return this.performSingleRangedAttack(token, 3, 2, "jb2a.arrow.physical.white.01");
+  }
+
+  getGuardAttack(token) {
+    return this.performSingleRangedAttack(token, 5, 6, "jb2a.bolt.physical.white", {minRange: 4});
+  }
+
   getBugbearAttack(token) {
-    return this.performSingleRangedAttack(token, 1, 5, "jb2a.greatclub.standard");
+    const range = 3;
+    const damage = 5;
+
+    const sourceGridPos = this.getTokenGridPos(token);
+    const reachableCells = this.getCellsWithinRange(sourceGridPos, range, {minRange:2});
+
+    if (reachableCells.length <= 0)
+      return null;
+
+    const reachable = reachableCells.map((cell) =>
+    {
+      const blast = this.getHostileInfosInRangeSortedByHp(cell, 1, {includeStartPos:true});
+      const totalHp = blast.reduce((sum, info) => sum + info.hp, 0);
+      const totalCost = blast.reduce((sum, info) => sum + info.path.cost, 0);
+      return {
+        cell : cell,
+        blast : blast,
+        totalHp : totalHp,
+        totalCost : totalCost
+      };
+    }).filter(o => o.totalHp > 0);
+
+    if (reachable.length <= 0)
+      return null;
+
+    reachable.sort((a,b) => {
+      if (a.totalHp == b.totalHp)
+        return a.totalCost - b.totalCost;
+      return b.totalHp - a.totalHp;
+    });
+
+    const target = reachable[0];
+    return this.performBugbearAttackAnim(token, target.cell, damage, target.blast);
   }
 
-  getGoblinArcherAttack(token) {
-    return this.performSingleRangedAttack(token, 3, 3, "jb2a.arrow.physical.white");
+  async performBugbearAttackAnim(sourceToken, targetCell, damage, hostileInfos) {
+    
+    const grid = canvas.grid.grid;
+    const targetPixels = grid.getPixelsFromGridPosition(targetCell[0], targetCell[1]);
+    const targetCenter = grid.getCenter(targetPixels[0], targetPixels[1]);
+    const targetPosObj = {x:targetCenter[0], y:targetCenter[1]};
+
+    const self = this;
+    
+    for(const hi of hostileInfos) {
+      hi.hp = hi.hp - damage;
+    }
+
+    const s = new Sequence();
+    s.effect()
+      .atLocation(sourceToken.document, {offset: {x:0.25}, local:true, gridUnits:true})
+      .stretchTo(targetPosObj, {randomOffset:0.2})
+      .file("jb2a.boulder.toss")
+      .waitUntilFinished(-1500);
+    s.thenDo(async function() {
+      const damageProms = hostileInfos.map((hi) => self.applyDamage(hi.token, damage));  
+      await Promise.all(damageProms);      
+    });
+    await s.play();
   }
 
-  performSingleRangedAttack(source, range, damage, animName) {
-    const infos = this.getHostileInfosInRangeSortedByHp(source, range);
+  performSingleRangedAttack(sourceToken, range, damage, animName, options) {
+    const sourceGridPos = this.getTokenGridPos(sourceToken);
+    const infos = this.getHostileInfosInRangeSortedByHp(sourceGridPos, range, options);
     if (infos.length == 0)
       return null;
 
     const nearest = infos[0];
     nearest.hp = nearest.hp - damage;
 
-    return this.performAttackAnim(source, nearest.token, animName, damage);
+    return this.performAttackAnim(sourceToken, nearest.token, animName, damage);
   }
 
-  getHostileInfosInRangeSortedByHp(sourceToken, range) {
-    const sourceGridPos = this.getTokenGridPos(sourceToken);
-    const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, false);
+  getHostileInfosInRangeSortedByHp(sourceGridPos, range, options) {
+    const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, options);
     const infos = inRange.map(t => this.getTokenInfo(t));
     
     infos.sort((a, b) => {
       if (a.token && b.token && a.path && b.path) {
-        if (a.path.cost == b.path.cost) {
+        if (a.path.cost == b.path.cost)
           return b.token.actor.system.attributes.hp.value - a.token.actor.system.attributes.hp.value;
-        }
         return a.path.cost - b.path.cost;
       }
       return -1;
@@ -242,8 +318,8 @@ export class WaveTick {
     return infos;
   }
   
-  getHostileTokensWithinRange(gridPos, range, includeStartPos) {
-    const reachableCells = this.getCellsWithinRange(gridPos, range, includeStartPos);
+  getHostileTokensWithinRange(gridPos, range, options) {
+    const reachableCells = this.getCellsWithinRange(gridPos, range, options);
 
     let hostiles = [];
     for(const cell of reachableCells) {
@@ -255,8 +331,12 @@ export class WaveTick {
     return hostiles;
   }
 
-  getCellsWithinRange(startGridPos, range, includeStartPos) {
+  getCellsWithinRange(startGridPos, range, options) {
     const grid = canvas.grid.grid;
+
+    options = options || {};
+    const includeStartPos = options.includeStartPos || false;
+    const minRange = options.minRange || 0;
 
     const queue = [[startGridPos, 0]];
 
@@ -268,16 +348,19 @@ export class WaveTick {
     }
 
     while (queue.length > 0) {
-      const cur = queue.pop();
+      const cur = queue.shift();
       const gridPos = cur[0];
       const spaces = cur[1];
 
       if (spaces < range) {
         const neighbors = grid.getNeighbors(gridPos[0], gridPos[1]);
+
         for (const n of neighbors) {
           if (visited[n])
             continue;
-          result.push(n); 
+
+          if (spaces+1 >= minRange)
+            result.push(n);
           visited[n] = true;
           queue.push([n, spaces+1]);
         }
@@ -288,22 +371,31 @@ export class WaveTick {
   }
 
   async performAttackAnim(source, target, anim, damage) {
-    let s = new Sequence();
+    const self = this;
+    const s = new Sequence();
     s.effect()
-      .atLocation(source.document)
-      .stretchTo(target.document)
+      .atLocation(source.document, {offset: {x:0.25}, local:true, gridUnits:true})
+      .stretchTo(target.document, {randomOffset: 0.1})
       .file(anim)
-      .waitUntilFinished();
+      .waitUntilFinished(-500);
+    s.thenDo(async function() {
+      await self.applyDamage(target, damage);  
+    });
     await s.play();
+  }
 
-    let info = this.getTokenInfo(target);
-    
+  applyDamage(target, damage) {
+    if (!DO_DEAL_DAMAGE)
+      return Promise.resolve();
+
+    const info = this.getTokenInfo(target);
+     
     if (info.updatePromise == null)
       info.updatePromise = target.document.actor.applyDamage(damage);
     else 
       info.updatePromise = info.updatePromise.then(() => {target.document.actor.applyDamage(damage)});
 
-    await info.updatePromise;
+    return info.updatePromise;
   }
 
   setupHostileGridMap(hostilePlan) {
@@ -335,23 +427,13 @@ export class WaveTick {
   }
 
   getTokenWithName(name, placeables) {
-    let tokens = placeables
+    const tokens = placeables
       .filter(t => t.document.name == name);
     if (tokens.length != 1) {
       throw new Error("Expected a single token named '" + name + "', found " + tokens.length);
     }
     return tokens[0];
   }
-
-  /*
-  isWithinSpaces(source, target, gridSquares) {
-    const grid = canvas.grid.grid;
-    const p0 = new Point(source.document.x, source.document.y);
-    const p1 = new Point(target.document.x, target.document.y);
-    const dist = grid.measureDistance(p0, p1);
-    return dist <= gridSquares;
-  }
-  */
 
   getEnabledHostileTokens() {
     return this._enabledTokens
@@ -411,7 +493,7 @@ export class WaveTick {
         x:newPos[0],
         y:newPos[1]
       });
-      await this.sleep(400);
+      await this.sleep(options.sleep || 400);
     }
   }
 

@@ -347,6 +347,9 @@ export class WaveTick {
       result.push(startGridPos);
     }
 
+    const startGridPixels = grid.getPixelsFromGridPosition(startGridPos[0], startGridPos[1]);
+    const startGridPoint = {x:startGridPixels[0], y:startGridPixels[1]};
+
     while (queue.length > 0) {
       const cur = queue.shift();
       const gridPos = cur[0];
@@ -358,10 +361,17 @@ export class WaveTick {
         for (const n of neighbors) {
           if (visited[n])
             continue;
+          visited[n] = true;
+
+          const nPixels = grid.getPixelsFromGridPosition(n[0], n[1]);
+          const nPoint = {x:nPixels[0], y:nPixels[1]};
+
+          const hitsWall = canvas.walls.checkCollision(new Ray(startGridPoint, nPoint), {type:"sight",mode:"any"});
+          if (hitsWall)
+            continue;
 
           if (spaces+1 >= minRange)
             result.push(n);
-          visited[n] = true;
           queue.push([n, spaces+1]);
         }
       }

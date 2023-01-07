@@ -228,11 +228,9 @@ export class WaveTick {
 
   getFriendlyTokenBuffedDamage(token, baseDamage) {
     const info = this.getTokenInfo(token);
-    console.warn(info);
     if (!info.damageBuff)
       return baseDamage;
     const finalDamage = baseDamage + Math.min(5, baseDamage);
-    console.warn(finalDamage);
     return finalDamage;
   }
 
@@ -297,7 +295,6 @@ export class WaveTick {
     const gridPos = this.getTokenGridPos(token);
     const tokensToBuff = this.getFriendlyTokensWithinRange(gridPos, range, {ignoreSight: true});
 
-    console.warn(tokensToBuff);
     for(let t of tokensToBuff) {
       const info = this.getTokenInfo(t);
       info.damageBuff = true;

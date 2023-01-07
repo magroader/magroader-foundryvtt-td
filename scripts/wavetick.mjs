@@ -277,7 +277,7 @@ export class WaveTick {
   }
 
   getBartokAttack(token) {
-    return this.performRangedAttacks(token, 1, 15, "jb2a.greataxe.melee.standard.white", {numAttacks:2, onePerCell:true, pushback:2, attackDelay:1650});
+    return this.performRangedAttacks(token, 1, 15, this.hasJb2aPatreon() ? "jb2a.greataxe.melee.fire.blue" : "jb2a.greataxe.melee.standard.white", {numAttacks:2, onePerCell:true, pushback:2, attackDelay:1650});
   }
   
   getBennikktAttack(token) {
@@ -300,10 +300,11 @@ export class WaveTick {
     const eldritchRange = 9;
 
     const sourceGridPos = this.getTokenGridPos(token);
-    const meleeRange = this.getHostileTokensWithinRange(sourceGridPos, 1);
+    const meleeHostiles = this.getHostileTokensWithinRange(sourceGridPos, 1);
+    const rangeHostiles = this.getHostileTokensWithinRange(sourceGridPos, eldritchRange, {onePerCell:true, minRange:2});
 
-    if (meleeRange.length >= 2)
-      return this.performRangedAttacks(token, 1, 20, "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
+    if (meleeHostiles.length >= 2 || rangeHostiles.length < 2)
+      return this.performRangedAttacks(token, 1, 20, this.hasJb2aPatreon() ? "jb2a.greatsword.melee.fire.black" : "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
     return this.performRangedAttacks(token, eldritchRange, 12, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
   }
 

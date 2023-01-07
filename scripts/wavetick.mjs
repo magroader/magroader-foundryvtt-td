@@ -9,7 +9,7 @@ export class WaveTick {
   constructor() {
 
     this._orderedAttackFunctions = [
-      ["Bennikkt", this, this.getBennikktAttack],
+      ["Bennikkt", this, this.getBennikktBuff],
       ["Dagor", this, this.getDagorAttack],
       ["Thug", this, this.getThugAttack],
       ["Guard", this, this.getGuardAttack],
@@ -226,21 +226,34 @@ export class WaveTick {
     }
   }
 
+  getFriendlyTokenBuffedDamage(token, baseDamage) {
+    const info = this.getTokenInfo(token);
+    console.warn(info);
+    if (!info.damageBuff)
+      return baseDamage;
+    const finalDamage = baseDamage + Math.min(5, baseDamage);
+    console.warn(finalDamage);
+    return finalDamage;
+  }
+
   getThugAttack(token) {
-    return this.performRangedAttacks(token, 1, 12, "jb2a.mace.melee.01.white");
+    const damage = this.getFriendlyTokenBuffedDamage(token, 12);
+    return this.performRangedAttacks(token, 1, damage, "jb2a.mace.melee.01.white");
   }
 
   getGoblinAttack(token) {
-    return this.performRangedAttacks(token, 3, 2, "jb2a.arrow.physical.white.01", {numAttacks:2, onePerCell:true});
+    const damage = this.getFriendlyTokenBuffedDamage(token, 2);
+    return this.performRangedAttacks(token, 3, damage, "jb2a.arrow.physical.white.01", {numAttacks:2, onePerCell:true});
   }
 
   getGuardAttack(token) {
-    return this.performRangedAttacks(token, 5, 8, this.hasJb2aPatreon() ? "jb2a.bolt.physical.white" : "jb2a.bolt.physical", {minRange: 4});
+    const damage = this.getFriendlyTokenBuffedDamage(token, 8);
+    return this.performRangedAttacks(token, 5, damage, this.hasJb2aPatreon() ? "jb2a.bolt.physical.white" : "jb2a.bolt.physical", {minRange: 4});
   }
 
   getBugbearAttack(token) {
     const range = 3;
-    const damage = 5;
+    const damage = this.getFriendlyTokenBuffedDamage(token, 5);
 
     const sourceGridPos = this.getTokenGridPos(token);
     const reachableCells = this.getCellsWithinRange(sourceGridPos, range, {minRange:2});
@@ -275,16 +288,27 @@ export class WaveTick {
   }
 
   getBartokAttack(token) {
-    return this.performRangedAttacks(token, 1, 15, this.hasJb2aPatreon() ? "jb2a.greataxe.melee.fire.blue" : "jb2a.greataxe.melee.standard.white", {numAttacks:2, onePerCell:true, pushback:2, attackDelay:1650});
+    const damage = this.getFriendlyTokenBuffedDamage(token, 15);
+    return this.performRangedAttacks(token, 1, damage, this.hasJb2aPatreon() ? "jb2a.greataxe.melee.fire.blue" : "jb2a.greataxe.melee.standard.white", {numAttacks:2, onePerCell:true, pushback:2, attackDelay:1650});
   }
   
-  getBennikktAttack(token) {
+  getBennikktBuff(token) {
+    const range = 2;
+    const gridPos = this.getTokenGridPos(token);
+    const tokensToBuff = this.getFriendlyTokensWithinRange(gridPos, range, {ignoreSight: true});
 
+    console.warn(tokensToBuff);
+    for(let t of tokensToBuff) {
+      const info = this.getTokenInfo(t);
+      info.damageBuff = true;
+    }
+
+    return this.performBennikktBuffAnim(token, range);
   }
   
   getDagorAttack(token) {
     const range = 6;
-    const damage = 25;
+    const damage = this.getFriendlyTokenBuffedDamage(token, 25);
 
     const sourceGridPos = this.getTokenGridPos(token);
     const infos = this.getHostileInfosInRangeSortedByHp(sourceGridPos, range, {sortByHpFirst : true});
@@ -296,14 +320,30 @@ export class WaveTick {
   
   getKethisAttack(token) {
     const eldritchRange = 9;
+    const meleeDamage = this.getFriendlyTokenBuffedDamage(token, 20);
+    const rangedDamage = this.getFriendlyTokenBuffedDamage(token, 12);
 
     const sourceGridPos = this.getTokenGridPos(token);
     const meleeHostiles = this.getHostileTokensWithinRange(sourceGridPos, 1);
     const rangeHostiles = this.getHostileTokensWithinRange(sourceGridPos, eldritchRange, {onePerCell:true, minRange:2});
 
     if (meleeHostiles.length >= 2 || rangeHostiles.length < 2)
-      return this.performRangedAttacks(token, 1, 20, this.hasJb2aPatreon() ? "jb2a.greatsword.melee.fire.black" : "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
-    return this.performRangedAttacks(token, eldritchRange, 12, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
+      return this.performRangedAttacks(token, 1, meleeDamage, this.hasJb2aPatreon() ? "jb2a.greatsword.melee.fire.black" : "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
+    return this.performRangedAttacks(token, eldritchRange, rangedDamage, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
+  }
+
+  async performBennikktBuffAnim(sourceToken, range) {
+    const size = range*2+1.5;
+    const s = new Sequence();
+    s.effect()
+      .atLocation(sourceToken.document)
+      .file("jb2a.bless.400px.intro.blue")
+      .size({width:size, height:size}, {gridUnits:true})
+      .timeRange(1250, 2500)
+      .fadeOut(500)
+      .opacity(0.5)
+      ;
+    await s.play(); 
   }
 
   async performDagorAttackAnim(sourceToken, targetInfo, damage) {
@@ -434,7 +474,7 @@ export class WaveTick {
 
     const onePerCell = options.onePerCell || false;
 
-    let hostiles = [];
+    let ret = [];
     for(const cell of reachableCells) {
       const inCell = gridPosToTokenMap[cell];
       if (inCell && inCell.length > 0) {
@@ -442,14 +482,14 @@ export class WaveTick {
           inCell.sort((a,b) => {
             return b.actor.system.attributes.hp.value - a.actor.system.attributes.hp.value;
           });
-          hostiles.push(inCell[0]);
+          ret.push(inCell[0]);
         } else {
-          hostiles = hostiles.concat(inCell);
+          ret = ret.concat(inCell);
         }
       }
     }
 
-    return hostiles;
+    return ret;
   }
 
   getCellsWithinRange(startGridPos, range, options={}) {
@@ -458,6 +498,7 @@ export class WaveTick {
     options = options || {};
     const includeStartPos = options.includeStartPos || false;
     const minRange = options.minRange || 0;
+    const ignoreSight = options.ignoreSight || false;
 
     const queue = [[startGridPos, 0]];
 
@@ -487,9 +528,11 @@ export class WaveTick {
           const nPixels = grid.getPixelsFromGridPosition(n[0], n[1]);
           const nPoint = {x:nPixels[0], y:nPixels[1]};
 
-          const hitsWall = canvas.walls.checkCollision(new Ray(startGridPoint, nPoint), {type:"sight",mode:"any"});
-          if (hitsWall) {
-            continue;
+          if (!ignoreSight) {
+            const hitsWall = canvas.walls.checkCollision(new Ray(startGridPoint, nPoint), {type:"sight",mode:"any"});
+            if (hitsWall) {
+              continue;
+            }
           }
 
           if (spaces+1 >= minRange)

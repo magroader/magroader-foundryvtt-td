@@ -29,6 +29,7 @@ export class WaveTick {
     this._fullPath = null;
     this._gridPosToPathIndexMap = null;
     this._gridPosToHostileTokensMap = null;
+    this._gridPosToFriendlyTokensMap = null;
     this._friendlyWallIds = null;
     this._tokenInfoMap = null;
   }
@@ -83,15 +84,7 @@ export class WaveTick {
     this._enabledTokens = placeables
       .filter(t => !t.document.hidden);
 
-    this._friendlyTokens = this._enabledTokens
-      .filter(t => t.document.disposition == 1);
-
-      const entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
-      this._friendlyTokens.sort((a, b) => {
-        const sqDistanceA = this.distanceSq(a.document, entrancePos);
-        const sqDistanceB = this.distanceSq(b.document, entrancePos);
-        return sqDistanceA-sqDistanceB;
-      });
+    this.setupFriendlyTokens();
 
     this._initSuccess = true;
   }
@@ -111,7 +104,12 @@ export class WaveTick {
   }
 
   async performHostileMove() {
+
     let hostilePlan = await this.calculateHostilesPlan();
+    if (hostilePlan.length <= 0)
+      return;
+
+    this.setupHostileGridMap(hostilePlan);
 
     const moveDelay = Math.min(250, MAXIMUM_MOVE_ALL / hostilePlan.length);
 
@@ -128,7 +126,6 @@ export class WaveTick {
   }
 
   async performFriendlyAttack() {
-
     let hostilePlan = await this.calculateHostilesPlan();
     if (hostilePlan.length <= 0)
       return;
@@ -139,7 +136,8 @@ export class WaveTick {
     this.setupTokenHpInfo(activeHostileTokens);
 
     let tokenNameToTokens = {};
-    for (let t of this._friendlyTokens) {
+    for (let t of this._friendlyTokens
+      .filter(t => t.document.actor.system.attributes.hp.value > 0)) {
       let tokensSharingName = tokenNameToTokens[t.document.name];
       if (tokensSharingName == null) {
         tokensSharingName = []
@@ -422,15 +420,23 @@ export class WaveTick {
     });
     return infos;
   }
-  
+
+  getFriendlyTokensWithinRange(gridPos, range, options={}) {
+    return this.getTokensWithinRange(this._gridPosToFriendlyTokensMap, gridPos, range, options);
+  }
+
   getHostileTokensWithinRange(gridPos, range, options={}) {
+    return this.getTokensWithinRange(this._gridPosToHostileTokensMap, gridPos, range, options);
+  }
+  
+  getTokensWithinRange(gridPosToTokenMap, gridPos, range, options={}) {
     const reachableCells = this.getCellsWithinRange(gridPos, range, options);
 
     const onePerCell = options.onePerCell || false;
 
     let hostiles = [];
     for(const cell of reachableCells) {
-      const inCell = this._gridPosToHostileTokensMap[cell];
+      const inCell = gridPosToTokenMap[cell];
       if (inCell && inCell.length > 0) {
         if (onePerCell) {
           inCell.sort((a,b) => {
@@ -556,6 +562,30 @@ export class WaveTick {
         }
         arr.push(hp.token);
       }
+    }
+  }
+
+  setupFriendlyTokens() {      
+    this._friendlyTokens = this._enabledTokens
+      .filter(t => t.document.disposition == 1 && 
+        t.document.actor.system.attributes.hp.value > 0);
+
+    const entrancePos = {x:this._entrance.document.x, y:this._entrance.document.y};
+    this._friendlyTokens.sort((a, b) => {
+      const sqDistanceA = this.distanceSq(a.document, entrancePos);
+      const sqDistanceB = this.distanceSq(b.document, entrancePos);
+      return sqDistanceA-sqDistanceB;
+    });
+
+    this._gridPosToFriendlyTokensMap = {};
+    for (let t of this._friendlyTokens) {
+      const gridPos = this.getTokenGridPos(t);
+      let arr = this._gridPosToFriendlyTokensMap[gridPos];
+      if (arr == null) {
+        arr = [];
+        this._gridPosToFriendlyTokensMap[gridPos] = arr;
+      }
+      arr.push(t);
     }
   }
 

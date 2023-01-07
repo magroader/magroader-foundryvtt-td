@@ -285,7 +285,15 @@ export class WaveTick {
   }
   
   getDagorAttack(token) {
+    const range = 6;
+    const damage = 25;
 
+    const sourceGridPos = this.getTokenGridPos(token);
+    const infos = this.getHostileInfosInRangeSortedByHp(sourceGridPos, range, {sortByHpFirst : true});
+    if (infos.length <= 0)
+      return;
+
+    return this.performDagorAttackAnim(token, infos[0], damage);
   }
   
   getKethisAttack(token) {
@@ -297,6 +305,29 @@ export class WaveTick {
     if (meleeRange.length >= 2)
       return this.performRangedAttacks(token, 1, 20, "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
     return this.performRangedAttacks(token, eldritchRange, 12, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
+  }
+
+  async performDagorAttackAnim(sourceToken, targetInfo, damage) {
+    const targetToken = targetInfo.token;
+    const sourceLocation = {x:sourceToken.document.x, y:sourceToken.document.y};
+    const self = this;
+
+    targetInfo.hp = targetInfo.hp - damage;
+
+    const s = new Sequence()
+      .animation()
+        .on(sourceToken)
+        .moveTowards(targetToken, {ease:"easeInOutSine"})
+        .moveSpeed(20)
+        .closestSquare(true)
+        .waitUntilFinished()
+      .thenDo(async () => self.performAttackAnim(sourceToken, targetToken, "jb2a.rapier.melee.01.white", damage))
+      .animation()
+        .on(sourceToken)
+        .moveTowards(sourceLocation, {ease:"easeInOutSine"})
+        .moveSpeed(20)
+        .waitUntilFinished();
+    await s.play();
   }
 
   async performBugbearAttackAnim(sourceToken, targetCell, damage, hostileInfos) {
@@ -372,12 +403,19 @@ export class WaveTick {
   getHostileInfosInRangeSortedByHp(sourceGridPos, range, options={}) {
     const inRange = this.getHostileTokensWithinRange(sourceGridPos, range, options);
     const infos = inRange.map(t => this.getTokenInfo(t));
+    const sortByHpFirst = options.sortByHpFirst || false;
     
     infos.sort((a, b) => {
       if (a.token && b.token && a.path && b.path) {
-        if (a.path.cost == b.path.cost)
+        if (sortByHpFirst) {
+          if (b.token.actor.system.attributes.hp.value == a.token.actor.system.attributes.hp.value)
+            return a.path.cost - b.path.cost;
           return b.token.actor.system.attributes.hp.value - a.token.actor.system.attributes.hp.value;
-        return a.path.cost - b.path.cost;
+        } else {
+          if (a.path.cost == b.path.cost)
+            return b.token.actor.system.attributes.hp.value - a.token.actor.system.attributes.hp.value;
+          return a.path.cost - b.path.cost;
+        }
       }
       return -1;
     });
@@ -590,7 +628,7 @@ export class WaveTick {
     const td = token.document;
     const grid = canvas.grid.grid;
 
-    const maxSteps = options.maxSteps || path.Length-1;
+    let maxSteps = options.maxSteps || path.Length-1;
     if (maxSteps > path.length-1)
       maxSteps = path.length-1;
     for (let i = 1 ; i <= maxSteps ; ++i) {

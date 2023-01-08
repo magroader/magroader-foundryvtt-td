@@ -1,4 +1,4 @@
-const DO_HOSTILE_MOVE = false;
+const DO_HOSTILE_MOVE = true;
 const DO_FRIENDLY_ATTACKS = true;
 const DO_DEAL_DAMAGE = true;
 const DELETE_DEAD_HOSTILES = true;
@@ -66,8 +66,10 @@ export class WaveTick {
     if (hostilePlan.length > 0)
       return true;
 
-    if (DELETE_DEAD_HOSTILES)
+    if (DELETE_DEAD_HOSTILES) {
+      await this.sleep(2000);
       await this.deleteDeadHostiles();
+    }
     return false;
   }
 

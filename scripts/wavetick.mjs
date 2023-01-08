@@ -277,7 +277,7 @@ export class WaveTick {
     const reachable = reachableCells.map((cell) =>
     {
       const blast = this.getHostileInfosInRangeSortedByHp(cell, 1, {includeStartPos:true});
-      const totalHp = blast.reduce((sum, info) => sum + info.hp, 0);
+      const totalHp = blast.reduce((sum, info) => sum + Math.min(Math.max(0, info.hp), damage), 0);
       const totalCost = blast.reduce((sum, info) => sum + info.path.cost, 0);
       return {
         cell : cell,

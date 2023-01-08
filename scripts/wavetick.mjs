@@ -339,7 +339,7 @@ export class WaveTick {
     const meleeHostiles = this.getHostileTokensWithinRange(sourceGridPos, 1);
     const rangeHostiles = this.getHostileTokensWithinRange(sourceGridPos, eldritchRange, {onePerCell:true, minRange:2});
 
-    if (meleeHostiles.length >= 2 || rangeHostiles.length < 2)
+    if (meleeHostiles.length >= 2 || (rangeHostiles.length < 2 && meleeHostiles.length > 0))
       return this.performRangedAttacks(token, 1, meleeDamage, this.hasJb2aPatreon() ? "jb2a.greatsword.melee.fire.black" : "jb2a.greatsword.melee.standard.white", {numAttacks:2, onePerCell:true, attackDelay:1250});
     return this.performRangedAttacks(token, eldritchRange, rangedDamage, "jb2a.eldritch_blast.purple", {numAttacks:2, onePerCell:true, attackDelay:1100, minRange:2}); 
   }

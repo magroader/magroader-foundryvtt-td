@@ -344,7 +344,17 @@ export class WaveTick {
   }
 
   getMelithHeal(token) {
-    console.warn("MELITH IS HEALING");
+    const damage = -10;
+    const range = 2;
+    const gridPos = this.getTokenGridPos(token);
+    const tokensToHeal = this.getHostileTokensWithinRange(gridPos, range, {ignoreSight: true, includeStartPos:true});
+
+    for(let t of tokensToHeal) {
+      const info = this.getTokenInfo(t);
+      this.adjustTokenHp(info, damage);
+    }
+
+    return this.performMelithHealAnim(token, range, tokensToHeal, damage);
   }
   
   getDagorAttack(token) {
@@ -387,8 +397,30 @@ export class WaveTick {
     await s.play(); 
   }
 
+  async performMelithHealAnim(sourceToken, range, tokensToHeal, damage) {
+    const self = this;
+    const size = range*2;
+
+    const s = new Sequence();
+    s.effect()
+      .atLocation(sourceToken.document)
+      .file("jb2a.healing_generic.burst.purplepink")
+      .size({width:size, height:size}, {gridUnits:true})
+      .opacity(0.5)
+      .waitUntilFinished(-1500);
+    
+    s.thenDo(async function() {
+        const damageProms = tokensToHeal.map(t => self.applyDamage(t, damage));  
+        await Promise.all(damageProms)
+      });
+
+    s.wait(300);
+
+    await s.play();
+  }
+
   adjustTokenHp(info, damage) {
-    info.hp = Math.max(Math.min(0, info.token.hp - damage), info.token.document.actor.system.attributes.hp.max);
+    info.hp = Math.min(Math.max(0, info.hp - damage), info.token.document.actor.system.attributes.hp.max);
   }
 
   async performDagorAttackAnim(sourceToken, targetInfo, damage) {

@@ -1,4 +1,4 @@
-const DO_HOSTILE_MOVE = true;
+const DO_HOSTILE_MOVE = false;
 const DO_FRIENDLY_ATTACKS = true;
 const DO_DEAL_DAMAGE = true;
 const DELETE_DEAD_HOSTILES = true;
@@ -365,19 +365,28 @@ export class WaveTick {
 
     targetInfo.hp = targetInfo.hp - damage;
 
-    const s = new Sequence()
-      .animation()
-        .on(sourceToken)
-        .moveTowards(targetToken, {ease:"easeInOutSine"})
-        .moveSpeed(20)
-        .closestSquare(true)
-        .waitUntilFinished()
-      .thenDo(async () => self.performAttackAnim(sourceToken, targetToken, "jb2a.rapier.melee.01.white", damage))
-      .animation()
-        .on(sourceToken)
-        .moveTowards(sourceLocation, {ease:"easeInOutSine"})
-        .moveSpeed(20)
-        .waitUntilFinished();
+    const s = new Sequence();
+    s.animation()
+      .on(sourceToken)
+      .moveTowards(targetToken, {ease:"easeInOutSine"})
+      .moveSpeed(20)
+      .closestSquare(true)
+      .waitUntilFinished();
+  
+    this.addDamageEffectToSequence(s, sourceToken, targetToken, "jb2a.rapier.melee.01.white")
+      .startTime(1000)
+      .endTime(500)
+      .fadeIn(100)
+      .fadeOut(500)
+      .waitUntilFinished(-750);
+
+    this.addDamageApplyToSequence(s, targetToken, damage);
+
+    s.animation()
+      .on(sourceToken)
+      .moveTowards(sourceLocation, {ease:"easeInOutSine"})
+      .moveSpeed(20)
+      .waitUntilFinished();
     await s.play();
   }
 
@@ -558,17 +567,29 @@ export class WaveTick {
   }
 
   async performAttackAnim(source, target, anim, damage) {
-    const self = this;
     const s = new Sequence();
-    s.effect()
+    this.addAttackAndDamageToSequence(s, source, target, anim, damage)
+    await s.play();
+  }
+
+  addAttackAndDamageToSequence(sequence, source, target, anim, damage) {
+    this.addDamageEffectToSequence(sequence, source, target, anim);
+    return this.addDamageApplyToSequence(sequence, target, damage);
+  }
+
+  addDamageEffectToSequence(sequence, source, target, anim) {
+    return sequence.effect()
       .atLocation(source.document, {offset: {x:0.25}, local:true, gridUnits:true})
       .stretchTo(target.document, {randomOffset: 0.1})
       .file(anim)
       .waitUntilFinished(-500);
-    s.thenDo(async function() {
+  }
+
+  addDamageApplyToSequence(sequence, target, damage) {
+    const self = this;
+    return sequence.thenDo(async function() {
       await self.applyDamage(target, damage);  
     });
-    await s.play();
   }
 
   async performPushbackAnim(hostileInfo, pushback) {

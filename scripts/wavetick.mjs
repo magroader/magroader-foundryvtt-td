@@ -702,9 +702,7 @@ export class WaveTick {
     const td = token.document;
     const grid = canvas.grid.grid;
 
-    let maxSteps = options.maxSteps || path.Length-1;
-    if (maxSteps > path.length-1)
-      maxSteps = path.length-1;
+    const maxSteps = Math.min(options.maxSteps || path.Length-1, path.length-1);
 
     const stepDuration = 800/options.maxSteps;
     for (let i = 1 ; i <= maxSteps ; ++i) {

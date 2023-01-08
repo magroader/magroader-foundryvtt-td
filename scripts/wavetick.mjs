@@ -1,4 +1,5 @@
 const DO_HOSTILE_MOVE = true;
+const DO_HOSTILE_ATTACKS = true;
 const DO_FRIENDLY_ATTACKS = true;
 const DO_DEAL_DAMAGE = true;
 const DELETE_DEAD_HOSTILES = true;
@@ -9,7 +10,7 @@ const MAXIMUM_ATTACK_TIME = 2000;
 export class WaveTick {
   constructor() {
 
-    this._orderedAttackFunctions = [
+    this._orderedFriendlyAttackFunctions = [
       ["Bennikkt", this, this.getBennikktBuff],
       ["Dagor", this, this.getDagorAttack],
       ["Thug", this, this.getThugAttack],
@@ -18,6 +19,10 @@ export class WaveTick {
       ["Kethis", this, this.getKethisAttack],
       ["Goblin", this, this.getGoblinAttack],
       ["Bartok", this, this.getBartokAttack],
+    ];
+
+    this._orderedHostileAttackFunctions = [
+      ["Melith", this, this.getMelithHeal],
     ];
 
     this._initSucess = false;
@@ -48,8 +53,7 @@ export class WaveTick {
       if (pathSuccess) {
         if (DO_HOSTILE_MOVE)
           await this.performHostileMove();
-        if (DO_FRIENDLY_ATTACKS)
-          await this.performFriendlyAttack();
+        await this.performAttacks();
       }      
     } catch (error) {
       err = error;
@@ -136,7 +140,7 @@ export class WaveTick {
     await Promise.all(hostileMoveProm);
   }
 
-  async performFriendlyAttack() {
+  async performAttacks() {
     let hostilePlan = await this.calculateHostilesPlan();
     if (hostilePlan.length <= 0)
       return;
@@ -145,10 +149,29 @@ export class WaveTick {
 
     let activeHostileTokens = hostilePlan.map(p => p.token);
     this.setupTokenHpInfo(activeHostileTokens);
+    
+    if (DO_HOSTILE_ATTACKS)
+      await this.performHostileAttacks(activeHostileTokens);
+
+    if (DO_FRIENDLY_ATTACKS)
+      await this.performFriendlyAttacks();
+  }
+
+  async performHostileAttacks(hostileTokens) {
+    await this.performOrderedAttacks(hostileTokens, this._orderedHostileAttackFunctions);
+  }
+
+  async performFriendlyAttacks() {
+    await this.performOrderedAttacks(this._friendlyTokens, this._orderedFriendlyAttackFunctions);
+  }
+
+  async performOrderedAttacks(tokens, orderedAttackFunctions) {
+
+    const aliveTokens = tokens
+      .filter(t => t.document.actor.system.attributes.hp.value > 0);
 
     let tokenNameToTokens = {};
-    for (let t of this._friendlyTokens
-      .filter(t => t.document.actor.system.attributes.hp.value > 0)) {
+    for (const t of aliveTokens) {
       let tokensSharingName = tokenNameToTokens[t.document.name];
       if (tokensSharingName == null) {
         tokensSharingName = []
@@ -157,9 +180,9 @@ export class WaveTick {
       tokensSharingName.push(t);
     }
 
-    let friendlyAttackProms = [];
+    const attackProms = [];
     
-    for (let oa of this._orderedAttackFunctions) {
+    for (let oa of orderedAttackFunctions) {
       const tokenName = oa[0];
       const context = oa[1];
       const attackFunc = oa[2];
@@ -171,12 +194,12 @@ export class WaveTick {
       for (let t of allNamedTokens) {
         let attackProm = attackFunc.call(context, t);
         if (attackProm != null) {
-          await this.appendFriendlyAttack(friendlyAttackProms, attackProm);
+          await this.appendAttacks(attackProms, attackProm, aliveTokens.length);
         }
       }
     }
 
-    await Promise.all(friendlyAttackProms);
+    await Promise.all(attackProms);
   }
 
   async deleteDeadHostiles() {
@@ -235,10 +258,10 @@ export class WaveTick {
     await canvas.scene.deleteEmbeddedDocuments("Wall", this._friendlyWallIds);  
   }
 
-  async appendFriendlyAttack(promList, prom) {
+  async appendAttacks(promList, prom, totalNumTokens) {
     if (prom) {
       promList.push(prom);
-      const attackDelay = Math.min(250, MAXIMUM_ATTACK_TIME / this._friendlyTokens.length);
+      const attackDelay = Math.min(250, MAXIMUM_ATTACK_TIME / totalNumTokens);
       await this.sleep(attackDelay);
     }
   }
@@ -319,6 +342,10 @@ export class WaveTick {
 
     return this.performBennikktBuffAnim(token, range);
   }
+
+  getMelithHeal(token) {
+    console.warn("MELITH IS HEALING");
+  }
   
   getDagorAttack(token) {
     const range = 6;
@@ -360,12 +387,16 @@ export class WaveTick {
     await s.play(); 
   }
 
+  adjustTokenHp(info, damage) {
+    info.hp = Math.max(Math.min(0, info.token.hp - damage), info.token.document.actor.system.attributes.hp.max);
+  }
+
   async performDagorAttackAnim(sourceToken, targetInfo, damage) {
     const targetToken = targetInfo.token;
     const sourceLocation = {x:sourceToken.document.x, y:sourceToken.document.y};
     const self = this;
 
-    targetInfo.hp = targetInfo.hp - damage;
+    this.adjustTokenHp(targetInfo, damage);
 
     const s = new Sequence();
     s.animation()
@@ -402,7 +433,7 @@ export class WaveTick {
     const self = this;
     
     for(const hi of hostileInfos) {
-      hi.hp = hi.hp - damage;
+      this.adjustTokenHp(hi, damage);
     }
 
     const anim = this.hasJb2aPatreon() ? "jb2a.boulder.toss" : "jb2a.explosion";
@@ -443,7 +474,7 @@ export class WaveTick {
 
     for(let i = 0 ; i < numAttacks && i < infos.length ; ++i) {
       const thisInfo = infos[i];
-      thisInfo.hp = thisInfo.hp - damage;
+      this.adjustTokenHp(thisInfo, damage);
       const attackAnim = this.performAttackAnim(sourceToken, thisInfo.token, animName, damage);
       if (attackAnim) {
         attackPromises.push(attackAnim);

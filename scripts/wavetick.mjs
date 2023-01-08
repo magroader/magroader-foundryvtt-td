@@ -1,6 +1,7 @@
 const DO_HOSTILE_MOVE = true;
 const DO_FRIENDLY_ATTACKS = true;
 const DO_DEAL_DAMAGE = true;
+const DELETE_DEAD_HOSTILES = true;
 
 const MAX_MOVE_DELAY = 1000;
 const MAXIMUM_ATTACK_TIME = 2000;
@@ -62,7 +63,12 @@ export class WaveTick {
       throw err;
 
     const hostilePlan = await this.calculateHostilesPlan();
-    return hostilePlan.length > 0;
+    if (hostilePlan.length > 0)
+      return true;
+
+    if (DELETE_DEAD_HOSTILES)
+      await this.deleteDeadHostiles();
+    return false;
   }
 
   async init() {
@@ -169,6 +175,12 @@ export class WaveTick {
     }
 
     await Promise.all(friendlyAttackProms);
+  }
+
+  async deleteDeadHostiles() {
+    const deadHostiles = this.getDeadHostileTokens();
+    const ids = deadHostiles.map(t => t.document.id);
+    await canvas.scene.deleteEmbeddedDocuments("Token", ids);  
   }
 
   getTokenInfo(token) {
@@ -654,9 +666,18 @@ export class WaveTick {
     return tokens[0];
   }
 
-  getEnabledHostileTokens() {
+  getHostileTokens() {
     return this._enabledTokens
-      .filter(t => t.document.disposition == -1)
+      .filter(t => t.document.disposition == -1);
+  }
+
+  getDeadHostileTokens() {
+    return this.getHostileTokens()
+      .filter(t => t.actor.system.attributes.hp.value <= 0);
+  }
+
+  getEnabledHostileTokens() {
+    return this.getHostileTokens()
       .filter(t => t.actor.system.attributes.hp.value > 0);
   }
 

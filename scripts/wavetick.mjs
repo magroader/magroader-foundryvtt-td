@@ -281,7 +281,7 @@ export class WaveTick {
 
   getGoblinAttack(token) {
     const damage = this.getFriendlyTokenBuffedDamage(token, 2);
-    return this.performRangedAttacks(token, 3, damage, "jb2a.arrow.physical.white.01", {numAttacks:2, onePerCell:true});
+    return this.performRangedAttacks(token, 3, damage, "jb2a.arrow.physical.white.01", {numAttacks:2, onePerCell:true, minRange:2});
   }
 
   getGuardAttack(token) {

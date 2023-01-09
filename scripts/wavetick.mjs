@@ -51,8 +51,10 @@ export class WaveTick {
     let err = null;
     try {
       if (pathSuccess) {
-        if (DO_HOSTILE_MOVE)
+        if (DO_HOSTILE_MOVE) {
           await this.performHostileMove();
+          await this.sleep(200);
+        }
         await this.performAttacks();
       }      
     } catch (error) {
@@ -151,8 +153,10 @@ export class WaveTick {
     let activeHostileTokens = hostilePlan.map(p => p.token);
     this.setupTokenHpInfo(activeHostileTokens);
     
-    if (DO_HOSTILE_ATTACKS)
+    if (DO_HOSTILE_ATTACKS) {
       await this.performHostileAttacks(activeHostileTokens);
+      await this.sleep(200);
+    }
 
     if (DO_FRIENDLY_ATTACKS)
       await this.performFriendlyAttacks();
@@ -427,17 +431,25 @@ export class WaveTick {
   async performDagorAttackAnim(sourceToken, targetInfo, damage) {
     const targetToken = targetInfo.token;
     const sourceLocation = {x:sourceToken.document.x, y:sourceToken.document.y};
+    const targetLocation = {x:targetInfo.token.document.x, y:targetInfo.token.document.y};
     const self = this;
 
     this.adjustTokenHp(targetInfo, damage);
 
     const s = new Sequence();
-    s.animation()
-      .on(sourceToken)
-      .moveTowards(targetToken, {ease:"easeInOutSine"})
-      .moveSpeed(20)
-      .closestSquare(true)
-      .waitUntilFinished();
+
+    const grid = canvas.grid.grid;
+    const distance = grid.measureDistance(sourceLocation, targetLocation);
+    const doFly = distance > 1;
+    
+    if (doFly) {
+      s.animation()
+        .on(sourceToken)
+        .moveTowards(targetToken, {ease:"easeInOutSine"})
+        .moveSpeed(20)
+        .closestSquare(true)
+        .waitUntilFinished();
+    }
   
     this.addDamageEffectToSequence(s, sourceToken, targetToken, "jb2a.rapier.melee.01.white")
       .startTime(1000)
@@ -448,11 +460,14 @@ export class WaveTick {
 
     this.addDamageApplyToSequence(s, targetToken, damage);
 
-    s.animation()
-      .on(sourceToken)
-      .moveTowards(sourceLocation, {ease:"easeInOutSine"})
-      .moveSpeed(20)
-      .waitUntilFinished();
+    if (doFly) {
+      s.animation()
+        .on(sourceToken)
+        .moveTowards(sourceLocation, {ease:"easeInOutSine"})
+        .moveSpeed(20)
+        .waitUntilFinished();
+    }
+
     await s.play();
   }
 

@@ -127,8 +127,9 @@ export class WaveTick {
 
     const moveDelay = MAX_MOVE_DELAY;
 
-    let hostileMoveProm = [];
-    for(let hp of hostilePlan) {
+    const hostileMoveProm = [];
+    for(let i = hostilePlan.length-1 ; i >= 0 ; --i) {
+      const hp = hostilePlan[i];
       
       const moveSpeed = (hp.token.document.actor.system.attributes.movement.walk || 20) / 5; // assumed: 5 feet per grid space
 

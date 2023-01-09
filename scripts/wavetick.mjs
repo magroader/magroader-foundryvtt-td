@@ -4,7 +4,7 @@ const DO_FRIENDLY_ATTACKS = true;
 const DO_DEAL_DAMAGE = true;
 const DELETE_DEAD_HOSTILES = true;
 
-const MAX_MOVE_DELAY = 1000;
+const MAX_MOVE_DELAY = 3000;
 const MAXIMUM_ATTACK_TIME = 2000;
 
 export class WaveTick {
@@ -123,17 +123,18 @@ export class WaveTick {
 
     this.setupHostileGridMap(hostilePlan);
 
-    const moveDelay = Math.min(500, (MAX_MOVE_DELAY / hostilePlan.length));
+    const moveDelay = MAX_MOVE_DELAY;
 
     let hostileMoveProm = [];
     for(let hp of hostilePlan) {
       
       const moveSpeed = (hp.token.document.actor.system.attributes.movement.walk || 20) / 5; // assumed: 5 feet per grid space
+
       const thisMoveDelay = moveDelay / moveSpeed;
-      const p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:moveSpeed, sleep:thisMoveDelay});
+      const p = this.moveTokenAlongPath(hp.token, hp.path.path, {maxSteps:moveSpeed, duration:thisMoveDelay});
       if (p) {
         hostileMoveProm.push(p);
-        await this.sleep(thisMoveDelay);
+        await this.sleep(200);
       }
     }
 
@@ -811,7 +812,7 @@ export class WaveTick {
 
     const maxSteps = Math.min(options.maxSteps || path.Length-1, path.length-1);
 
-    const stepDuration = 800/options.maxSteps;
+    const stepDuration = options.duration/options.maxSteps;
     for (let i = 1 ; i <= maxSteps ; ++i) {
       const p = path[i];
       const newPos = grid.getPixelsFromGridPosition(p.y, p.x);
